@@ -1,0 +1,199 @@
+* Design goals
+No ambiguity.
+    A construct should directly synthesize to a netlist.
+Strong signal typing (clk, reset, data (signed/unsigned), ctrl)
+Syntax for addressing/controlling memories, muxes.
+Schedule awareness on clocks.
+    Verilog only supports the idea of state at CLK and implicitly next state at CLK+1
+Interop with verilog
+Library of standard cells and constructs
+Testability (probably a separate testing language?)
+Target language for HLS
+** Nice to haves
+Good macro support?
+Integration with yosys?
+
+* Yosys internals
+** Synthesizable verilog
+See yosys manual 2.2
+https://yosyshq.readthedocs.io/projects/yosys/en/latest/CHAPTER_Basics.html#features-of-synthesizable-verilog
+
+*** Structural
+"Structural Verilog (also known as Verilog Netlists) is a Netlist in Verilog syntax. Only the following language constructs are used in this case:
+    Constant values
+    Wire and port declarations
+    Static assignments of signals to other signals
+    Cell instantiations"
+*** Expressions
+"In all situations where Verilog accepts a constant value or signal name, expressions using arithmetic operations such as +, - and *, boolean operations such as & (AND), | (OR) and ^ (XOR) and many others (comparison operations, unary operator, etc.) can also be used. During synthesis these operators are replaced by cells that implement the respective function.
+
+*** Behavioral
+"Code that utilizes the Verilog always statement is using Behavioural Modelling. In behavioural modelling, a circuit is described by means of imperative program code that is executed on certain events, namely any change, a rising edge, or a falling edge of a signal. This is a very flexible construct during simulation but is only synthesizable when one of the following is modelled:"
+
+**** Asynchronous or latched logic
+"In this case the sensitivity list must contain all expressions that are used within the always block. The syntax @* can be used for these cases."
+"Note that latched logic is often considered bad style and in many cases just the result of sloppy HDL design. Therefore many synthesis tools generate warnings whenever latched logic is generated."
+**** Synchronous logic (with optional synchronous reset)
+"This is logic with d-type flip-flops on the output. In this case the sensitivity list must only contain the respective clock edge."
+**** Synchronous logic with asynchronous reset
+"This is logic with d-type flip-flops with asynchronous resets on the output. In this case the sensitivity list must only contain the respective clock and reset edges. The values assigned in the reset branch must be constant."
+**** Others
+"Many synthesis tools support a wider subset of flip-flops that can be modelled using always-statements (including Yosys). But only the ones listed above are covered by the Verilog synthesis standard and when writing new designs one should limit herself or himself to these cases."
+
+
+** yosys internal cell library
+https://yosyshq.readthedocs.io/projects/yosys/en/latest/CHAPTER_CellLib.html#internal-cell-library
+
+Simulation models for the RTL cells can be found in the file techlibs/common/simlib.v in the Yosys source tree.
+
+*** Unary
+All unary cells have one input port \A and one output port \Y.
+Also include parameters \A_SIGNED, \A_WIDTH, \Y_WIDTH
+
+Y=~A	$not
+Y=+A	$pos
+Y=-A	$neg
+Y=&A	$reduce_and
+Y=|A	$reduce_or
+Y=^A	$reduce_xor
+Y=~^A	$reduce_xnor
+Y=|A	$reduce_bool
+Y=!A	$logic_not
+*** Binary
+All binary cells have two input ports \A, \B and one output port \Y.
+Also include parameters \A_SIGNED, \A_WIDTH, \B_SIGNED, \B_WIDTH, \Y_WIDTH
+
+Y=A&B	$and
+Y=A<B	$lt
+Y=A|B	$or
+Y=A<=B	$le
+Y=A^B	$xor
+Y=A==B	$eq
+Y=A~^B	$xnor
+Y=A!=B	$ne
+Y=A<<B	$shl
+Y=A>=B	$ge
+Y=A>>B	$shr
+Y=A>B	$gt
+Y=A<<<B	$sshl
+Y=A+B	$add
+Y=A>>>B	$sshr
+Y=A-B	$sub
+Y=A&&B	$logic_and
+Y=A*B	$mul
+Y=A||B	$logic_or
+Y=A/B	$div
+Y=A===B	$eqx
+Y=A%B	$mod
+Y=A!==B	$nex
+N/A	$divfloor
+Y=A**B	$pow
+N/A	$modfoor
+
+Multiple shift types (see docs).
+
+*** Muxes
+The simplest multiplexer cell type is $mux, which implements the function Y=S?B:A.. Cells of this type have a \WITDH parameter and data inputs \A and \B and a data output \Y, all of the specified width. This cell also has a single bit control input \S.
+
+The $pmux cell is used to multiplex between many inputs using a one-hot select signal
+
+The $tribuf cell is used to implement tristate logic.
+
+Behavioural code with cascaded if-then-else- and case-statements usually results in trees of multiplexer cells.
+
+*** Registers
+SR-type latches are represented by $sr cells. These cells have input ports \SET and \CLR and an output port \Q, of width \WIDTH
+Both set and reset inputs have separate bits for every output bit. When both the set and reset inputs of an $sr cell are active for a given bit index, the reset input takes precedence.
+
+
+D-type cells have a clock port \CLK, an input port \D and an output port \Q. Signals for clock, reset, set, load all have polarity config.
+
+D-type flip-flops are represented by $dff cells.
+D-type flip-flops with asynchronous reset are represented by $adff cells.
+D-type flip-flops with synchronous reset are represented by $sdff cells.
+D-type flip-flops with asynchronous load are represented by $aldff cells.
+D-type flip-flops with asynchronous set and reset are represented by $dffsr cells.
+D-type flip-flops with enable are represented by $dffe, $adffe, $aldffe, $dffsre, $sdffe, and $sdffce cells, which are enhanced variants of $dff, $adff, $aldff, $dffsr, $sdff (with reset over enable) and $sdff (with enable over reset) cells, respectively.
+
+Note that the $adff and $sdff cells can only be used when the reset value is constant.
+
+D-type latches are represented by $dlatch cells. These cells have an enable port \EN, an input port \D, and an output port \Q.
+D-type latches with reset are represented by $adlatch cells.
+D-type latches with set and reset are represented by $dlatchsr cells.
+
+
+D-type have \WIDTH for \D and \Q
+
+
+*** Memories
+Memories are either represented using RTLIL::Memory objects, $memrd_v2, $memwr_v2, and $meminit_v2 cells, or by $mem_v2 cells alone.
+Having individual cells for read and write ports has the advantage that they can be consolidated using resource sharing passes.
+
+The $memrd_v2 cells have a clock input \CLK, an enable input \EN, an address input \ADDR, a data output \DATA, an asynchronous reset input \ARST, and a synchronous reset input \SRST.
+
+
+*** Others
+Docs are missing information about:
+$slice - splits part of a wire
+$concat - joins two wires to a single wider wire
+$lut - a LUT
+$sop - sum of products? A->Y. Some kind of table lookup.
+$alu - ALU
+$macc - Mult/Accepts
+$fa - Full adder
+$lcu - lookahead carry unit.
+
+Missing information about $specify2, $specify3, and $specrule cells.
+
+** 7400 series
+Encoding:
+BCD, gray code, excess-3, 7 segment, 9's complement
+
+* Constructs
+** macro processing
+generation with for loop
+templates
+functions
+
+** data types
+unions/ADTs
+enums
+control
+data (signed, unsigned) (encoded? - bcd, gray, excess-3, 1's complement)
+address/index
+clock
+reset
+
+** core modules
+combinational gates
+arithmetic
+flipflops
+latches
+mux, demux
+truth tables
+lookup tables
+addressable memory
+register file
+
+** core patterns
+FSM
+fifos
+shift registers
+counters
+
+** core modules
+CRC, parity
+7 segment
+
+** bus/apis
+wishbone/SBA, AMBA/AXI
+RS-232, I2C, CAN, etc
+serdes
+
+** clock management
+PLL, dividers
+
+* problems
+clock domains
+asynchronous triggers
+latches
