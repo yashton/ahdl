@@ -205,6 +205,15 @@
             (union_item_member (id_name thing))
             (union_item_member reg (ctrl_type (encoding_unsigned 4)))
             (union_item_member (splat_literal "'?"))))))]))
+  (define union-instance-tests
+    (test-suite "union instance"
+                [test-case "TODO" (fail "Missing")]))
+  (define struct-def-tests
+    (test-suite "struct definition"
+                [test-case "TODO" (fail "Missing")]))
+  (define struct-instance-tests
+    (test-suite "struct instance"
+                [test-case "TODO" (fail "Missing")]))
   (define conditional-tests
    (test-suite
      "Conditional block tests"
@@ -287,7 +296,8 @@
                         (left_binding a (reference d))
                         (left_binding b (binary_literal "1'b"))
                         (left_binding c (op_band (reference f) (reference b))))
-                       (op_add (reference a) (reference c))))]))
+                       (op_add (reference a) (reference c))))]
+     [test-case "TODO" (fail "Missing")]))
 
 
   (define ops-tests
@@ -370,13 +380,37 @@
                                               2 1)
                                              1))))))))))))))))))))))))]))
 
-;;  (display-tokens "t || s && r | q ^ p & o != n == m >= l <= k > j < i >> h << g - f + e % d / c * !~-+b.a<2:1><1>")
-  (run-tests ops-tests)
-  (run-tests let-tests)
-  (run-tests match-tests)
+  (define module-tests
+    (test-suite "module definition"
+                     [test-case "TODO" (fail "Missing")]))
+  (define module-instance-tests
+    (test-suite "module definition"
+                     [test-case "TODO" (fail "Missing")]))
+
+  (define binding-expr-tests
+    (test-suite "binding expressions"
+                     [test-case "TODO" (fail "Missing")]))
+  (define binding-tests
+    (test-suite "top binding"
+                     [test-case "TODO" (fail "Missing")]))
+
+  (define reference-tests
+    (test-suite "reference instances"
+                     [test-case "TODO" (fail "Missing")]))
+  (run-tests literal-tests)
   (run-tests type-tests)
   (run-tests type-hint-tests)
-  (run-tests conditional-tests)
-  (run-tests literal-tests)
   (run-tests enum-def-tests)
-  (run-tests union-def-tests))
+  (run-tests union-def-tests)
+  (run-tests union-instance-tests)
+  (run-tests struct-def-tests)
+  (run-tests struct-instance-tests)
+  (run-tests conditional-tests)
+  (run-tests match-tests)
+  (run-tests let-tests)
+  (run-tests ops-tests)
+  (run-tests module-tests)
+  (run-tests module-instance-tests)
+  (run-tests binding-expr-tests)
+  (run-tests binding-tests)
+  (run-tests reference-tests))

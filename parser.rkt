@@ -1,6 +1,5 @@
 #lang brag
-hardware: (enum_def | union_def | struct_def | module_def | type_alias | (type | expr))*
-;; hardware: (type_alias | union_def | enum_def | module_def | encoding_def)*
+hardware: (enum_def | union_def | struct_def | module_def | type_alias | type | expr)*
 
 ;; ;;;;;;;;;;;;;;;; Literals ;;;;;;;;;;;;;;;;
 ;; ; Allowed to use a generic name
@@ -45,10 +44,11 @@ id_def: /"[" IDENTIFIER (/"<" NUMBER /">")? /"]"
 union_def: /"union" IDENTIFIER (/"<" NUMBER /">")? id_def? /"{" [union_item (/"," union_item)*] /"}"
 union_item: IDENTIFIER /"(" [union_item_member (/"," union_item_member)*] /")"
 union_item_member: (IDENTIFIER /"::" type) | id_name | literal
+union_instance: "missing"
 
 struct_def: /"" IDENTIFIER (/"<" NUMBER /">")? id_def? /"{" [struct_item (/"," struct_item)*] /"}"
 struct_item: (IDENTIFIER /"::" type) | literal
-
+struct_instance: "missing"
 ;; encoding_def: "encoding" IDENTIFIER
 ;;;;;;;;;;;;;;;; Definitions ;;;;;;;;;;;;;;;;
 ; Should allow positive edge, negative edge, or level trigger?
@@ -64,7 +64,8 @@ module_body: module_def | enum_def | union_def | type_alias |  bind_def
 argument_list: "(" [argument ("," argument)*] ")"
 argument: IDENTIFIER addr_bind? "::" type
 
-bind_def: /"bind" (IDENTIFIER? /"(" bind_args /")" | bind_args | "*") /"<=" (module_instance | expr | bindset)
+bind_def: /"bind" bind_lhs /"<=" (module_instance | union_instance | struct_instance | expr | binding)
+bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*")
 bind_args: [left_binding (/";" left_binding)*]
 
 ; Look into numeric parameters
@@ -85,7 +86,7 @@ type_hint: expr /"::" type
 
 ;;;;;;;;;;;;;;;; Operators ;;;;;;;;;;;;;;;;
 ;; This matches C precedence
-@primary_expr: literal | reference | group_expr
+@primary_expr: literal | reference | group_expr | union_instance | struct_instance
 @group_expr: /"(" expr /")"
 
 @postfix_expr: primary_expr | op_member
