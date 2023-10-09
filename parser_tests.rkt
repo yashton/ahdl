@@ -65,6 +65,8 @@
                                               '(decimal_literal "7'd" 4))]
      [test-case "Hex" (check-equal? (parse-test-literal "fda14097'x")
                                     '(hex_literal "fda14097'x"))]
+     [test-case "Hex single symbol" (check-equal? (parse-test-literal "A'x")
+                                    '(hex_literal "A'x"))]
      [test-case "Hex sized" (check-equal? (parse-test-literal "fda34'x<32>")
                                           '(hex_literal "fda34'x" 32))]
      [test-case "Hex don't care" (check-equal? (parse-test-literal "?fa92?'x")
@@ -206,14 +208,53 @@
             (union_item_member reg (ctrl_type (encoding_unsigned 4)))
             (union_item_member (splat_literal "'?"))))))]))
   (define union-instance-tests
-    (test-suite "union instance"
-                [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "union instance"
+     [test-case
+         "Union instance creation"
+       (check-equal?
+        (parse-test-expr "thing::second(A'x + foo, 1011'b, '?)")
+        '(union_instance
+          thing
+          second
+          (op_add (hex_literal "A'x") (reference foo))
+          (binary_literal "1011'b")
+          (splat_literal "'?")))]))
   (define struct-def-tests
-    (test-suite "struct definition"
-                [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "struct definition"
+     [test-case "Struct with implicit sizes"
+       (check-equal?
+        (parse-test-expr "struct thing(left::data<4>, right::ctrl<4>)")
+        '(struct_def
+          thing
+          (struct_item left (data_type (encoding_unsigned 4)))
+          (struct_item right (ctrl_type (encoding_unsigned 4)))))]
+     [test-case
+         "Struct with explicit sizes and id"
+       (check-equal?
+        (parse-test "struct thing<12>(num::data<4>, reg::ctrl<4>, '?)")
+        '(hardware
+          (struct_def
+           thing
+           12
+           (struct_item num (data_type (encoding_unsigned 4)))
+           (struct_item reg (ctrl_type (encoding_unsigned 4)))
+           (struct_item (splat_literal "'?")))))]))
+
   (define struct-instance-tests
-    (test-suite "struct instance"
-                [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "struct instance"
+     [test-case
+         "Struct instance creation"
+       (check-equal?
+        (parse-test-expr "thing(A'x + foo, 1011'b, '?)")
+        '(struct_instance
+          thing
+          (op_add (hex_literal "A'x") (reference foo))
+          (binary_literal "1011'b")
+          (splat_literal "'?")))]))
+
   (define conditional-tests
    (test-suite
      "Conditional block tests"
@@ -274,10 +315,10 @@
                      '(match_expr
                        (reference foo)
                        (match_expr_case
-                        (destructure (reference a))
+                        (destructure a)
                         (op_eq (reference a) (binary_literal "1'b"))
                         (binary_literal "1'b"))
-                       (match_expr_case (destructure (reference _)) (binary_literal "0'b"))))]))
+                       (match_expr_case (destructure _) (binary_literal "0'b"))))]))
   (define let-tests
     (test-suite
      "let and destructuring"
@@ -327,7 +368,7 @@
          "precedence 1 > 2"
        (check-equal? (parse-test-expr "i * j + k % l ")
                      '(op_add (op_mult (reference i) (reference j))
-                               (op_mod (reference k) (reference l))))]
+                              (op_mod (reference k) (reference l))))]
      [test-case
          "left to right associative addition"
        (check-equal? (parse-test-expr "a + b - c")
@@ -348,48 +389,106 @@
                            (op_slice
                             (op_member (reference b) a)
                             2 1)
-                          1))))))]
+                           1))))))]
      [test-case
          "precedence god test"
        (check-equal? (parse-test-expr "t || s && r | q ^ p & o != n == m >= l <= k > j < i >> h << g - f + e % d / c * !~-+b.a<2:1><1>")
-                     '(op_or (reference t)
-                       (op_and (reference s)
-                        (op_bor (reference r)
-                         (op_bxor (reference q)
-                          (op_band (reference p)
-                           (op_neq (reference o)
-                            (op_eq (reference n)
-                             (op_gte (reference m)
-                              (op_lte (reference l)
-                               (op_gt (reference k)
-                                (op_lt (reference j)
-                                 (op_shiftr (reference i)
-                                  (op_shiftl (reference h)
-                                   (op_sub (reference g)
-                                    (op_add (reference f)
-                                     (op_mod (reference e)
-                                      (op_div (reference d)
-                                       (op_mult (reference c)
+                     '(op_or
+                       (reference t)
+                       (op_and
+                        (reference s)
+                        (op_bor
+                         (reference r)
+                         (op_bxor
+                          (reference q)
+                          (op_band
+                           (reference p)
+                           (op_neq
+                            (reference o)
+                            (op_eq
+                             (reference n)
+                             (op_gte
+                              (reference m)
+                              (op_lte
+                               (reference l)
+                               (op_gt
+                                (reference k)
+                                (op_lt
+                                 (reference j)
+                                 (op_shiftr
+                                  (reference i)
+                                  (op_shiftl
+                                   (reference h)
+                                   (op_sub
+                                    (reference g)
+                                    (op_add
+                                     (reference f)
+                                     (op_mod
+                                      (reference e)
+                                      (op_div
+                                       (reference d)
+                                       (op_mult
+                                        (reference c)
                                         (op_not
                                          (op_bnot
                                           (op_neg
                                            (op_pos
                                             (op_index
-                                             (op_slice
-                                              (op_member (reference b) a)
-                                              2 1)
-                                             1))))))))))))))))))))))))]))
+                                             (op_slice (op_member (reference b) a) 2 1)
+                                             1))))))))))))))))))))))))]
+     [test-case
+         "precedence god reverse test"
+       (check-equal? (parse-test-expr "a * b / c % d + e - f << g >> h < i > j <= k >= l == m != n & o ^ p | r && s || t")
+                     '(op_or
+                       (op_and
+                        (op_bor
+                         (op_bxor
+                          (op_band
+                           (op_neq
+                            (op_eq
+                             (op_gte
+                              (op_lte
+                               (op_gt
+                                (op_lt
+                                 (op_shiftr
+                                  (op_shiftl
+                                   (op_sub
+                                    (op_add
+                                     (op_mod
+                                      (op_div
+                                       (op_mult
+                                        (reference a)
+                                        (reference b))
+                                       (reference c))
+                                      (reference d))
+                                     (reference e))
+                                    (reference f))
+                                   (reference g))
+                                  (reference h))
+                                 (reference i))
+                                (reference j))
+                               (reference k))
+                              (reference l))
+                             (reference m))
+                            (reference n))
+                           (reference o))
+                          (reference p))
+                         (reference r))
+                        (reference s))
+                       (reference t)))]))
 
   (define module-tests
     (test-suite "module definition"
                      [test-case "TODO" (fail "Missing")]))
+
   (define module-instance-tests
-    (test-suite "module definition"
+    (test-suite "module instance"
                      [test-case "TODO" (fail "Missing")]))
 
   (define binding-expr-tests
     (test-suite "binding expressions"
                      [test-case "TODO" (fail "Missing")]))
+
   (define binding-tests
     (test-suite "top binding"
                      [test-case "TODO" (fail "Missing")]))

@@ -17,6 +17,8 @@ hex_literal: HEX size_def?
 ascii_literal: ASCII size_def?
 
 ;;;;;;;;;;;;;;;; Types ;;;;;;;;;;;;;;;;
+; Need to introduce imports and namespaces
+
 ; should subtype be allow as implicit data<>?
 @type: clk_type | addr_type | data_type | ctrl_type
 ; In case a clk or address needs to be passed as a value
@@ -37,40 +39,46 @@ encoding_unsigned: /("unsigned" | "u") | (/("unsigned" | "u") /"<" NUMBER /">") 
 ;;;;;;;;;;;;;;;; Composite type definitions ;;;;;;;;;;;;;;;;
 type_alias: /"type" IDENTIFIER /":=" subtype
 
+;;;;;;;; Enums ;;;;;;;;
 enum_def: /"enum" IDENTIFIER id_def? /"{" [id_name (/"," id_name)*] /"}"
 id_name: IDENTIFIER (/"[" NUMBER /"]")?
 id_def: /"[" IDENTIFIER (/"<" NUMBER /">")? /"]"
 
+;;;;;;;; Unions ;;;;;;;;
 union_def: /"union" IDENTIFIER (/"<" NUMBER /">")? id_def? /"{" [union_item (/"," union_item)*] /"}"
 union_item: IDENTIFIER /"(" [union_item_member (/"," union_item_member)*] /")"
 union_item_member: (IDENTIFIER /"::" type) | id_name | literal
-union_instance: "missing"
 
-struct_def: /"" IDENTIFIER (/"<" NUMBER /">")? id_def? /"{" [struct_item (/"," struct_item)*] /"}"
+;;;;;;;; Structs ;;;;;;;;
+struct_def: /"struct" IDENTIFIER (/"<" NUMBER /">")? /"(" [struct_item (/"," struct_item)*] /")"
 struct_item: (IDENTIFIER /"::" type) | literal
-struct_instance: "missing"
-;; encoding_def: "encoding" IDENTIFIER
+
 ;;;;;;;;;;;;;;;; Definitions ;;;;;;;;;;;;;;;;
 ; Should allow positive edge, negative edge, or level trigger?
-clk_def: "@" "{" ("pos" | "neg" | "lev")? IDENTIFIER "}"
-addr_def: "[" [id_name ("," id_name)*] "]"
+clk_def: /"@" /"{" ("pos" | "neg" | "lev")? IDENTIFIER /"}"
+addr_def: /"[" [id_name ("," id_name)*] /"]"
 
 ; TODO extend to relative parameters
 template_def: "<" [IDENTIFIER ("," IDENTIFIER)*] ">"
 addr_bind: "@" "[" IDENTIFIER "]"
 
-module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list "=>" argument_list "{" module_body "}"
-module_body: module_def | enum_def | union_def | type_alias |  bind_def
-argument_list: "(" [argument ("," argument)*] ")"
-argument: IDENTIFIER addr_bind? "::" type
-
-bind_def: /"bind" bind_lhs /"<=" (module_instance | union_instance | struct_instance | expr | binding)
+;;;;;;;;;;;;;;;; Bind ;;;;;;;;;;;;;;;;
+bind_def: /"bind" bind_lhs /"<=" bind_rhs
+bind_rhs: module_instance | union_instance | struct_instance | expr | binding
 bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*")
 bind_args: [left_binding (/";" left_binding)*]
 
+;;;;;;;;;;;;;;;; Modules ;;;;;;;;;;;;;;;;
 ; Look into numeric parameters
-module_instance: IDENTIFIER "<" generic_defs ">" "@" "{" [IDENTIFIER ("," IDENTIFIER)*] "}" "(" [right_binding ("," right_binding)*] ")"
-generic_defs: [encoding_generic ("," encoding_generic)]
+module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list "=>" argument_list "{" module_body "}"
+module_body: module_def | enum_def | union_def | type_alias |  bind_def
+argument_list: /"(" [argument (/";" argument)*] /")"
+argument: IDENTIFIER addr_bind? /"::" type
+
+module_instance: IDENTIFIER generic_defs  module_clock_binding? module_bindings
+module_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
+module_bindings: "(" ([right_binding (/";" right_binding)*])? /")"
+generic_defs: /"<" [encoding_generic ("," encoding_generic)] /">"
 ;;;;;;;;;;;;;;;; Expressions ;;;;;;;;;;;;;;;;
 ; Expressions have two types - value expression (expr) or binding expressions (bind)
 ; bindings can't be used with operators
@@ -78,18 +86,23 @@ generic_defs: [encoding_generic ("," encoding_generic)]
 ; if the RHS is a value, it is bound to the LHS (with destructure)
 ; if the RHS is a bindings, the bindings are applied to the outer scope
 reference: IDENTIFIER addr_ref? clk_ref?
-addr_ref: /"[" expr /"]"
+addr_ref: /"@"? /"[" expr /"]"
 clk_ref: /"@{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
 
-@expr: tuple_expr | let_expr | if_expr | match_expr | or_expr | primary_expr | type_hint
+@expr: let_expr | if_expr | match_expr | or_expr | type_hint
 type_hint: expr /"::" type
 
 ;;;;;;;;;;;;;;;; Operators ;;;;;;;;;;;;;;;;
 ;; This matches C precedence
-@primary_expr: literal | reference | group_expr | union_instance | struct_instance
+@primary_expr: literal | reference
 @group_expr: /"(" expr /")"
+tuple_expr: /"(" [expr (/"," expr)+] /")"
 
-@postfix_expr: primary_expr | op_member
+@instance_expr: primary_expr | struct_instance | union_instance
+union_instance: IDENTIFIER /"::" IDENTIFIER /"(" [expr (/"," expr)*] /")"
+struct_instance: IDENTIFIER /"(" [expr (/"," expr)*] /")"
+
+@postfix_expr: instance_expr | op_member
 op_member: postfix_expr /"." IDENTIFIER
 
 ; Similar to python slices, but should be MSB.
@@ -169,8 +182,14 @@ let_expr: let_clause /"{" expr /"}"
 let_left_bind: [left_binding (/"," left_binding)*]
 ;; destructure: "(" [destructure_item, ("," destructure_item)*] ")"
 ;; destructure_item: IDENTIFIER | (IDENTIFIER "::" type) | destructure | (IDENTIFIER destructure) | literal
-destructure: literal | reference
-tuple_expr: /"(" [expr (/"," expr)+] /")"
+destructure: literal | IDENTIFIER | destructure_tuple | destructure_union | destructure_struct | destructure_slices | destructure_binding
+
+;; destructure cases:
+destructure_tuple: "missings"
+destructure_union: "missings"
+destructure_struct:"missings"
+destructure_slices:"missings"
+destructure_binding: "missings"
 
 ;;;;;;;;;;;;;;;; Conditional ;;;;;;;;;;;;;;;;
 if_expr: /"if" expr /"{" expr /"}" /"else" else_expr
@@ -180,7 +199,7 @@ match_expr: /"match" expr /"{" [match_expr_case (match_expr_case)*] /"}"
 match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 @match_clause: destructure (/"when" expr)?
 
-;;;;;;;;;;;;;;;; Binding ;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
 binding: right_binding | let_bind | if_bind | match_bind | bindset
 bindset: [binding (/";" binding)*]
 right_binding: expr /"->" reference
