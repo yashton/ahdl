@@ -32,6 +32,12 @@
       (brag-token 'DECIMAL lexeme)]
      [(:seq (:+ (char-set "0123456789abcdefABCDEF?")) "'x")
       (brag-token 'HEX lexeme)]
+     ; https://www.seximal.net/
+     [(:seq (:+ (char-set "012345?")) "'s")
+      (brag-token 'SEXIMAL lexeme)]
+     [(:seq (:or alphabetic numeric) "'n")
+      (brag-token 'NIF lexeme)]
+
      [(:or ">=" "<=" "=>" "->" "<-" "!=" "==" "&&" "||" "::" ":=" "<<")
       (brag-token lexeme lexeme)]
      [(char-set "[]{}<>();&|^%*/+!~-,@:.") ;; unused symbols #$`
