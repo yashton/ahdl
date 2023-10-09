@@ -1,5 +1,5 @@
 #lang brag
-hardware: (enum_def | union_def | struct_def | module_def | type_alias | type | expr)*
+hardware: (enum_def | union_def | struct_def | module_def | type_alias | type | expr | bind_def)*
 
 ;; ;;;;;;;;;;;;;;;; Literals ;;;;;;;;;;;;;;;;
 ;; ; Allowed to use a generic name
@@ -30,8 +30,8 @@ data_type: /"data" (/"<" subtype /">")?
 ; generics
 @subtype: encoding_signed | encoding_unsigned | encoding_generic
 encoding_generic: IDENTIFIER (/"<" [subtype (/"," subtype)*] /">")?
-encoding_signed: /("signed" | "s") (/"<" NUMBER /">")?
-encoding_unsigned: /("unsigned" | "u") | (/("unsigned" | "u") /"<" NUMBER /">") | NUMBER
+encoding_signed: /("signed" | "s") size_def?
+encoding_unsigned: /("unsigned" | "u") | (/("unsigned" | "u") size_def?) | NUMBER
 ; Built in encodings are 2's compliment signed and unsigned ints of bit length.
 ; also aliases, unions, and structs
 ; Leaving room for additional encodings (e.g. BCD, Gray, float) through generics
@@ -42,51 +42,52 @@ type_alias: /"type" IDENTIFIER /":=" subtype
 ;;;;;;;; Enums ;;;;;;;;
 enum_def: /"enum" IDENTIFIER id_def? /"{" [id_name (/"," id_name)*] /"}"
 id_name: IDENTIFIER (/"[" NUMBER /"]")?
-id_def: /"[" IDENTIFIER (/"<" NUMBER /">")? /"]"
+id_def: /"[" IDENTIFIER size_def? /"]"
 
 ;;;;;;;; Unions ;;;;;;;;
-union_def: /"union" IDENTIFIER (/"<" NUMBER /">")? id_def? /"{" [union_item (/"," union_item)*] /"}"
+union_def: /"union" IDENTIFIER size_def? id_def? /"{" [union_item (/"," union_item)*] /"}"
 union_item: IDENTIFIER /"(" [union_item_member (/"," union_item_member)*] /")"
 union_item_member: (IDENTIFIER /"::" type) | id_name | literal
 
 ;;;;;;;; Structs ;;;;;;;;
-struct_def: /"struct" IDENTIFIER (/"<" NUMBER /">")? /"(" [struct_item (/"," struct_item)*] /")"
+struct_def: /"struct" IDENTIFIER size_def? /"(" [struct_item (/"," struct_item)*] /")"
 struct_item: (IDENTIFIER /"::" type) | literal
 
 ;;;;;;;;;;;;;;;; Definitions ;;;;;;;;;;;;;;;;
 ; Should allow positive edge, negative edge, or level trigger?
 clk_def: /"@" /"{" ("pos" | "neg" | "lev")? IDENTIFIER /"}"
-addr_def: /"[" [id_name ("," id_name)*] /"]"
+addr_id_def: IDENTIFIER size_def?
+addr_def: /"[" [addr_id_def (/"," addr_id_def)*] /"]"
 
 ; TODO extend to relative parameters
-template_def: "<" [IDENTIFIER ("," IDENTIFIER)*] ">"
-addr_bind: "@" "[" IDENTIFIER "]"
+template_def: /"<" [IDENTIFIER (/"," IDENTIFIER)*] /">"
+addr_bind: "@"? /"[" IDENTIFIER /"]"
 
 ;;;;;;;;;;;;;;;; Bind ;;;;;;;;;;;;;;;;
 bind_def: /"bind" bind_lhs /"<=" bind_rhs
-bind_rhs: module_instance | union_instance | struct_instance | expr | binding
-bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*")
+bind_rhs: module_instance | union_instance | struct_instance | binding | reference
+bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
 bind_args: [left_binding (/";" left_binding)*]
 
 ;;;;;;;;;;;;;;;; Modules ;;;;;;;;;;;;;;;;
 ; Look into numeric parameters
-module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list "=>" argument_list "{" module_body "}"
-module_body: module_def | enum_def | union_def | type_alias |  bind_def
+module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" module_body /"}"
+module_body: (module_def | enum_def | union_def | struct_def | type_alias | bind_def | let_expr)*
 argument_list: /"(" [argument (/";" argument)*] /")"
-argument: IDENTIFIER addr_bind? /"::" type
+argument: IDENTIFIER addr_ref? /"::" type
 
-module_instance: IDENTIFIER generic_defs  module_clock_binding? module_bindings
+module_instance: IDENTIFIER module_generics?  module_clock_binding? module_input_binding
 module_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
-module_bindings: "(" ([right_binding (/";" right_binding)*])? /")"
-generic_defs: /"<" [encoding_generic ("," encoding_generic)] /">"
+module_input_binding: /"(" ([right_binding (/";" right_binding)*])? /")"
+module_generics: /"<" [subtype (/"," subtype)*] /">"
 ;;;;;;;;;;;;;;;; Expressions ;;;;;;;;;;;;;;;;
 ; Expressions have two types - value expression (expr) or binding expressions (bind)
 ; bindings can't be used with operators
-; when a top bind operation happens:
-; if the RHS is a value, it is bound to the LHS (with destructure)
-; if the RHS is a bindings, the bindings are applied to the outer scope
+; when a top bind operation happens, if the RHS is a bindings, the bindings are applied to the outer scope
 reference: IDENTIFIER addr_ref? clk_ref?
-addr_ref: /"@"? /"[" expr /"]"
+@addr_ref: addr_use_ref | addr_loc_ref
+addr_use_ref: /"[" expr /"]"
+addr_loc_ref: /"@" /"[" expr /"]"
 clk_ref: /"@{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
 
 @expr: let_expr | if_expr | match_expr | or_expr | type_hint
@@ -201,7 +202,7 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
 binding: right_binding | let_bind | if_bind | match_bind | bindset
-bindset: [binding (/";" binding)*]
+bindset: [binding (/";" binding)*] /";"?
 right_binding: expr /"->" reference
 let_bind: let_clause /"{" binding /"}"
 if_bind: /"if" binding /"{" binding /"}" /"else" else_bind

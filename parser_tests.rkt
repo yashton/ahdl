@@ -20,7 +20,13 @@
   (define (parse-test-literal code)
     (match (parse-test code)
       [(list hardware d) d]))
+  (define (parse-test-bind code)
+    (match (parse-test code)
+      [(list hardware d) d]))
   (define (parse-test-expr code)
+    (match (parse-test code)
+      [(list hardware d) d]))
+  (define (parse-test-module code)
     (match (parse-test code)
       [(list hardware d) d]))
   (define (parse-test-type-hint code)
@@ -337,8 +343,7 @@
                         (left_binding a (reference d))
                         (left_binding b (binary_literal "1'b"))
                         (left_binding c (op_band (reference f) (reference b))))
-                       (op_add (reference a) (reference c))))]
-     [test-case "TODO" (fail "Missing")]))
+                       (op_add (reference a) (reference c))))]))
 
 
   (define ops-tests
@@ -478,12 +483,92 @@
                        (reference t)))]))
 
   (define module-tests
-    (test-suite "module definition"
-                     [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "module definition"
+     [test-case
+         "Basic module"
+       (check-equal?
+        (parse-test-module
+         "module add(left::data<16>; right::data<16>) => (output::data<17>) {}")
+        '(module_def
+          add
+          (argument_list
+           (argument left (data_type (encoding_unsigned 16)))
+           (argument right (data_type (encoding_unsigned 16))))
+          (argument_list (argument output (data_type (encoding_unsigned 17))))
+          (module_body))
+        )]
+     [test-case
+         "Module with template variable"
+       (check-equal?
+        (parse-test-module
+         "module mux<S>[element<S>]
+         (target@[element]::data<S>) => (output[element]::data<16>)
+         {
+             bind output[element] <= target@[element]
+         }")
+        '(module_def
+          mux
+          (template_def S)
+          (addr_def (addr_id_def element S))
+          (argument_list
+           (argument
+            target
+            (addr_loc_ref (reference element))
+            (data_type (encoding_generic S))))
+          (argument_list
+           (argument
+            output
+            (addr_use_ref (reference element))
+            (data_type (encoding_unsigned 16))))
+          (module_body
+           (bind_def
+            (bind_lhs (reference output (addr_use_ref (reference element))))
+            (bind_rhs (reference target (addr_loc_ref (reference element))))))))]))
+
 
   (define module-instance-tests
-    (test-suite "module instance"
-                     [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "module instance"
+     [test-case
+         "Simple instance"
+       (check-equal?
+        (parse-test-bind "bind y <= adder (a -> left; b -> right)")
+        '(bind_def
+          (bind_lhs (reference y))
+          (bind_rhs
+           (module_instance
+            adder
+            (module_input_binding
+             (right_binding (reference a) (reference left))
+             (right_binding (reference b) (reference right)))))))]
+     [test-case
+         "Instance with generics"
+       (check-equal?
+        (parse-test-bind "bind y <= adder (a -> left; b -> right)")
+        '(bind_def
+          (bind_lhs (reference y))
+          (bind_rhs
+           (module_instance
+            adder
+            (module_input_binding
+             (right_binding (reference a) (reference left))
+             (right_binding (reference b) (reference right)))))))]
+     [test-case
+         "Instance with generics and clock"
+       (check-equal?
+        (parse-test-bind "bind y <= adder<unsigned<3>>@{clk} (a -> left; b -> right)")
+        '(bind_def
+          (bind_lhs (reference y))
+          (bind_rhs
+           (module_instance
+            adder
+            (module_generics (encoding_unsigned 3))
+            (module_clock_binding clk)
+            (module_input_binding
+             (right_binding (reference a) (reference left))
+             (right_binding (reference b) (reference right)))))))]))
+
 
   (define binding-expr-tests
     (test-suite "binding expressions"
@@ -496,6 +581,8 @@
   (define reference-tests
     (test-suite "reference instances"
                      [test-case "TODO" (fail "Missing")]))
+
+
   (run-tests literal-tests)
   (run-tests type-tests)
   (run-tests type-hint-tests)
