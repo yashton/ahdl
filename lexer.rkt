@@ -42,7 +42,7 @@
       (brag-token lexeme lexeme)]
      [(char-set "[]{}<>();&|^%*/+!~-,@:.") ;; unused symbols #$`
       (brag-token lexeme lexeme)]
-     [(:: (:? "-") (:+ numeric))
+     [(:+ numeric)
       (brag-token 'NUMBER (string->number lexeme))]
      [(:+ (:or alphabetic "_" numeric))
       (brag-token 'IDENTIFIER (string->symbol lexeme))]

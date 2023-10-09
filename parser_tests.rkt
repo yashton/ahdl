@@ -29,6 +29,13 @@
   (define (parse-test-module code)
     (match (parse-test code)
       [(list hardware d) d]))
+  (define (parse-test-reference code)
+    (match (parse-test (string-join (list "let x <- " code "{x}")))
+      [(list hardware
+             (list let_expr
+                   (list let_left_bind
+                         (list left_binding x d))
+                            (list reference x))) d]))
   (define (parse-test-type-hint code)
     (match (parse-test code)
       [(list hardware d) d]))
@@ -318,13 +325,13 @@
                                          a when a == 1'b => 1'b
                                          _ => 0'b
                                        }")
-                     '(match_expr
-                       (reference foo)
-                       (match_expr_case
-                        (destructure a)
-                        (op_eq (reference a) (binary_literal "1'b"))
-                        (binary_literal "1'b"))
-                       (match_expr_case (destructure _) (binary_literal "0'b"))))]))
+  '(match_expr
+    (reference foo)
+    (match_expr_case
+     (destructure (reference a))
+     (op_eq (reference a) (binary_literal "1'b"))
+     (binary_literal "1'b"))
+    (match_expr_case (destructure (reference _)) (binary_literal "0'b"))))]))
   (define let-tests
     (test-suite
      "let and destructuring"
@@ -524,6 +531,34 @@
           (module_body
            (bind_def
             (bind_lhs (reference output (addr_use_ref (reference element))))
+            (bind_rhs (reference target (addr_loc_ref (reference element))))))))]
+     [test-case
+         "Module with template variable and clock"
+       (check-equal?
+        (parse-test-module
+         "module mux<S>[element<S>]@{clk}
+         (target@[element]::data<S>) => (output[element]::data<16>)
+         {
+             bind output[element] <= target@[element]
+         }")
+        '(module_def
+          mux
+          (template_def S)
+          (addr_def (addr_id_def element S))
+          (clk_def clk)
+          (argument_list
+           (argument
+            target
+            (addr_loc_ref (reference element))
+            (data_type (encoding_generic S))))
+          (argument_list
+           (argument
+            output
+            (addr_use_ref (reference element))
+            (data_type (encoding_unsigned 16))))
+          (module_body
+           (bind_def
+            (bind_lhs (reference output (addr_use_ref (reference element))))
             (bind_rhs (reference target (addr_loc_ref (reference element))))))))]))
 
 
@@ -571,16 +606,88 @@
 
 
   (define binding-expr-tests
-    (test-suite "binding expressions"
-                     [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "binding expressions"
+     [test-case
+         "if/else bind"
+       (check-equal?
+        (parse-test-bind
+         "bind * <= if set {
+              target@{clk} -> addr@{clk+1}
+          } else if incr {
+              addr@{clk} + 1'b -> addr@{clk+1}
+          } else {
+              addr@{clk} -> addr@{clk+1}
+          }")
+        '(bind_def
+          (bind_lhs "*")
+          (bind_rhs
+           (binding
+            (if_bind
+             (reference set)
+             (binding
+              (right_binding (reference target (clk_ref clk)) (reference addr (clk_ref clk "+" 1))))
+             (if_bind
+              (reference incr)
+              (binding
+               (right_binding
+                (op_add (reference addr (clk_ref clk)) (binary_literal "1'b"))
+                (reference addr (clk_ref clk "+" 1))))
+              (binding
+               (right_binding (reference addr (clk_ref clk)) (reference addr (clk_ref clk "+" 1))))))))))]))
 
   (define binding-tests
-    (test-suite "top binding"
-                     [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "top binding"
+     [test-case
+         "simple module instance"
+       (check-equal?
+        (parse-test "bind alu <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)")
+        '())]))
+
 
   (define reference-tests
-    (test-suite "reference instances"
-                     [test-case "TODO" (fail "Missing")]))
+    (test-suite
+     "reference instances"
+     [test-case
+         "Bare"
+       (check-equal? (parse-test-reference "foo") '(reference foo))]
+     [test-case
+         "With addresss"
+       (check-equal?
+        (parse-test-reference "foo[addr]")
+        '(reference foo (addr_use_ref (reference addr))))]
+     [test-case
+         "With addresss sub-expr"
+       (check-equal?
+        (parse-test-reference "foo[f'x]")
+        '(reference foo (addr_use_ref (hex_literal "f'x"))))]
+     [test-case
+         "With addresss number"
+       (check-equal?
+        (parse-test-reference "foo[addr + 1'b]")
+        '(reference foo (addr_use_ref (op_add (reference addr) (binary_literal "1'b")))))]
+     [test-case
+         "With address location"
+       (check-equal? (parse-test-reference "foo@[addr]") '(reference foo (addr_loc_ref (reference addr))))]
+     [test-case
+         "With clock"
+       (check-equal? (parse-test-reference "foo@{clk}") '(reference foo (clk_ref clk)))]
+     [test-case
+         "With clock offset"
+       (check-equal?
+        (parse-test-reference "foo@{clk-2}") '(reference foo (clk_ref clk "-" 2)))]
+     [test-case
+         "With address and clock"
+       (check-equal?
+        (parse-test-reference "foo[addr]@{clk}")
+        '(reference foo (addr_use_ref (reference addr)) (clk_ref clk)))]
+     [test-case
+         "With address and clock offset"
+       (check-equal?
+        (parse-test-reference "foo@[addr]@{clk + 2}")
+        '(reference foo (addr_loc_ref (reference addr)) (clk_ref clk "+" 2)))]))
+
 
 
   (run-tests literal-tests)

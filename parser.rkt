@@ -20,7 +20,7 @@ ascii_literal: ASCII size_def?
 ; Need to introduce imports and namespaces
 
 ; should subtype be allow as implicit data<>?
-@type: clk_type | addr_type | data_type | ctrl_type
+@type: clk_type | addr_type | data_type | ctrl_type | subtype
 ; In case a clk or address needs to be passed as a value
 clk_type: /"clock"
 addr_type: /"address" size_def?
@@ -65,7 +65,7 @@ addr_bind: "@"? /"[" IDENTIFIER /"]"
 
 ;;;;;;;;;;;;;;;; Bind ;;;;;;;;;;;;;;;;
 bind_def: /"bind" bind_lhs /"<=" bind_rhs
-bind_rhs: module_instance | union_instance | struct_instance | binding | reference
+bind_rhs: module_instance | union_instance | struct_instance | binding | expr
 bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
 bind_args: [left_binding (/";" left_binding)*]
 
@@ -78,8 +78,9 @@ argument: IDENTIFIER addr_ref? /"::" type
 
 module_instance: IDENTIFIER module_generics?  module_clock_binding? module_input_binding
 module_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
-module_input_binding: /"(" ([right_binding (/";" right_binding)*])? /")"
-module_generics: /"<" [subtype (/"," subtype)*] /">"
+module_input_arg: right_binding | reference
+module_input_binding: /"(" ([module_input_arg (/";" module_input_arg)*])? /")"
+module_generics: /"<" [type (/"," type)*] /">"
 ;;;;;;;;;;;;;;;; Expressions ;;;;;;;;;;;;;;;;
 ; Expressions have two types - value expression (expr) or binding expressions (bind)
 ; bindings can't be used with operators
@@ -88,7 +89,7 @@ reference: IDENTIFIER addr_ref? clk_ref?
 @addr_ref: addr_use_ref | addr_loc_ref
 addr_use_ref: /"[" expr /"]"
 addr_loc_ref: /"@" /"[" expr /"]"
-clk_ref: /"@{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
+clk_ref: /"@" /"{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
 
 @expr: let_expr | if_expr | match_expr | or_expr | type_hint
 type_hint: expr /"::" type
@@ -183,8 +184,8 @@ let_expr: let_clause /"{" expr /"}"
 let_left_bind: [left_binding (/"," left_binding)*]
 ;; destructure: "(" [destructure_item, ("," destructure_item)*] ")"
 ;; destructure_item: IDENTIFIER | (IDENTIFIER "::" type) | destructure | (IDENTIFIER destructure) | literal
-destructure: literal | IDENTIFIER | destructure_tuple | destructure_union | destructure_struct | destructure_slices | destructure_binding
-
+;;destructure: literal | IDENTIFIER | destructure_tuple | destructure_union | destructure_struct | destructure_slices | destructure_binding | reference
+destructure: expr
 ;; destructure cases:
 destructure_tuple: "missings"
 destructure_union: "missings"
@@ -203,9 +204,9 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
 binding: right_binding | let_bind | if_bind | match_bind | bindset
 bindset: [binding (/";" binding)*] /";"?
-right_binding: expr /"->" reference
+right_binding: (expr /"->" reference) | ("*" "->" "*")
 let_bind: let_clause /"{" binding /"}"
-if_bind: /"if" binding /"{" binding /"}" /"else" else_bind
+if_bind: /"if" expr /"{" binding /"}" /"else" else_bind
 @else_bind: (if_bind | (/"{" binding /"}"))
 match_bind: /"match" expr /"{" [match_case_bind (match_case_bind)*] /"}"
-match_case_bind: match_clause /"{" binding /"}"
+match_case_bind: match_clause "=>" ((/"{" binding /"}") | binding)

@@ -14,13 +14,13 @@ union instruction<32>[id<16>]
     jmp(id,literal_addr::ctrl<28>),
     load(id, reg_addr::ctrl<4>, '?<4>, reg_out::ctrl<4>, '?<16>),
     store(id, reg_addr::ctrl<4>, reg_::ctrl<4>, '?<20>),
-    set(id, reg::ctrl<4>, literal::data<u24>)
+    set(id, reg::ctrl<4>, literal::data<u24>),
     noop(id, '?)
 }
 
-module memory<D>[addr<256>]@{clk} (mem_in[addr]::D, wr_en:: ctrl) => (mem_out[addr]::D)
+module memory<D>[addr<256>]@{clk} (mem_in[addr]::D; wr_en::ctrl) => (mem_out[addr]::D)
 {
-    if wr_en {
+    bind * <= if wr_en {
         mem_in[addr]@{clk} -> mem_out[addr]@{clk+1};
     } else {
         mem_out[addr]@{clk} -> mem_out[addr]@{clk+1};
@@ -29,40 +29,39 @@ module memory<D>[addr<256>]@{clk} (mem_in[addr]::D, wr_en:: ctrl) => (mem_out[ad
 
 module mux[element<16>] (target@[element]::data<16>) => (output[element]::data<16>)
 {
-    bind output[element] <= target@[element];
+    bind output[element] <= target@[element]
 }
 
-module arith_logic_unit_expr (a::data<s32>, b::data<s32>, op::ops) => (y::data<s33>)
+module arith_logic_unit_expr (a::data<s32>; b::data<s32>; op::ops) => (y::data<s33>)
 {
     bind y <= match op {
-        op::add => a + b
-	op::sub => a + -b
-	op::shiftl => a << b
-	op::shiftr => a >> b
-	op::mult => a<16:0> * b<16:0>
+        add::ops => a + b
+        sub::ops => a + -b
+        shiftl::ops => a << b
+        shiftr::ops => a >> b
+        mult::ops => a<16:0> * b<16:0>
     }
 }
 
-module arith_logic_unit_bind (a::data<s32>, b::data<s32>, op::ops) => (y::data<s33>)
+module arith_logic_unit_bind (a::data<s32>; b::data<s32>; op::ops) => (y::data<s33>)
 {
     bind * <= match op {
-        op::add => a + b -> y;
-	op::sub => a + -b -> y;
-	op::shiftl => a << b -> y;
-	op::shiftr => a >> b -> y;
-	op::mult => a<16:0> * b<16:0> -> y;
+        add::ops => a + b -> y;
+        sub::ops => a - b -> y;
+        shiftl::ops => a << b -> y;
+        shiftr::ops => a >> b -> y;
+        mult::ops => a<16:0> * b<16:0> -> y;
     }
 }
-*/
-/*
+
 module regfile[left<16>, right<16>, center<16>, in<16>]@{clk}
-(regin[in]::data<u32>, wr_en::ctrl)
-=> (regleft[left]::data<u32>, regright[right]::data<u32>, regcenter[center]::data<u32>)
+(regin[in]::data<u32>; wr_en::ctrl)
+=> (regleft[left]::data<u32>; regright[right]::data<u32>; regcenter[center]::data<u32>)
 {
-    bind regs <= reg[addr<16>]@{clk}::data<u32>;
-    regs[left] -> regleft;
-    regs[right] -> regright;
-    regin -> regs[in]@{clk+1}
+    bind regs <= reg[addr<16>]@{clk}::data<u32>
+    bind regleft <= regs[left]
+    bind regright <= regs[right]
+    bind regs[in]@{clk+1} <= regin
 }
 
 enum states
@@ -70,79 +69,82 @@ enum states
     fetch, store, exec, wait
 }
 
-module program_counter@{clk}(target::data<u32>, set::ctrl, incr::ctrl) => (address::data<u32>)
+module program_counter@{clk}(target::data<u32>; set::ctrl; incr::ctrl) => (addr::data<u32>)
 {
-    if set:
-	target@{clk} -> address@{clk+1}
-    else if incr:
-	address@{clk} + 1 -> address@{clk+1}
-    else:
-	address@{clk} -> address@{clk+1}
+    bind * <= if set {
+        target@{clk} -> addr@{clk+1}
+    } else if incr {
+        addr@{clk} + 1'b -> addr@{clk+1}
+    } else {
+        addr@{clk} -> addr@{clk+1}
+    }
 }
 
 module cpu@{clk} () => ()
 {
-    bind alu (alu_result) <= arith_logic_unit@{clk} (alu_op_a -> a, alu_op_b -> b, alu_op -> op);
-    bind reg (reg_left <- reg_left, reg_right <- reg_right) <= regfile@{clk} (reg_in, reg_wr);
-    bind mem (mem_out) <- memory<data<u32>>@{clk}(mem_in -> mem_in);
-    bind overflow <= reg@{clk}::ctrl<1>;
-    bind pc <= reg@{clk}::data<u32>;
+    bind alu <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)
+    bind (reg_left <- reg_left; reg_right <- reg_right) <= regfile@{clk} (reg_in -> reg_in; reg_wr -> reg_in)
+    bind mem_out <= memory<data<u32>>@{clk}(mem_in -> mem_in)
+    bind overflow <= reg@{clk}::ctrl<1>
+    bind pc <= reg@{clk}::data<u32>
 
     bind * <= match state@{clk} {
-	states::fetch => {
-	    pc@{clk} + 1 -> pc@{clk+1};
+        states::fetch => {
+            pc@{clk} + 1'b -> pc@{clk+1};
         }
-	states::exec => {
-	    match mem_out[pc]@{clk} {
-		add(_, left, right, out, _) => {
-		    add::ops -> alu_op;
-		    regleft[left]@{clk} -> alu_op_a;
-		    regright[right]@{clk} -> alu_op_b;
-		    alu_result<0:32> -> regin[out]@{clk+1};
-		    alu_result<32> as ctrl -> overflow@{clk+1};
-		    pc@{clk} + 1 -> pc@{clk+1};
-		    states::exec -> state@{clk+1};
-		    * -> *;
-		}
-		mult(_, left, right, out, _) => {
-		    mult::ops -> alu_op;
-		    regleft[left]@{clk} -> alu_op_a;
-		    regright[right]@{clk} -> alu_op_b;
-		    alu_result<0:32>@{clk+3} -> regin[out]@{clk+4};
-		    pc@{clk} + 1 -> pc@{clk+1};
-		    states::wait -> state@{clk+1};
-		    states::wait -> state@{clk+2};
-		    states::wait -> state@{clk+3};
-		    states::exec -> state@{clk+4};
-		    '0 -> overflow@{clk+1};
-		}
-		bre(_, target, _) => {
-		    if regleft[left]@{clk} == regright[right]@{clk}:
-			reg[target]@{clk} -> pc@{clk+1};
-		    else:
-			pc@{clk} + 1 -> pc@{clk+1};
-		    states::exec -> state@{clk+1};
-		    '0 -> overflow@{clk+1};
-		}
-		load(_, addr, reg, _) => {
-		    mem_out[reg_left[addr]@{clk}]@{clk+1} -> reg_in[reg]@{clk+2};
-		    states::wait -> state@{clk+1};
-		    states::exec -> state@{clk+2};
-		    pc@{clk} + 1 -> pc@{clk+1};
-		    '0 -> overflow@{clk+1};
-		}
-		store(_, addr, reg, _) => {
-		    reg_in[reg]@{clk} -> mem_in[reg_left[reg]@{clk}]@{clk+1};
-		    '1 -> mem_wr;
-		    states::wait -> state@{clk+1};
-		    states::exec -> state@{clk+2};
-		}
-		nop(_)  => {
-		    pc@{clk} + 1 -> pc@{clk+1};
-		}
+        states::exec => {
+            match mem_out[pc]@{clk} {
+                add(_, left, right, out, _) => {
+                    add::ops -> alu_op;
+                    regleft[left]@{clk} -> alu_op_a;
+                    regright[right]@{clk} -> alu_op_b;
+                    alu_result<0:32> -> regin[out]@{clk+1};
+                    alu_result<32> as ctrl -> overflow@{clk+1};
+                    pc@{clk} + 1'b -> pc@{clk+1};
+                    states::exec -> state@{clk+1};
+                }
+                mult(_, left, right, out, _) => {
+                    mult::ops -> alu_op;
+                    regleft[left]@{clk} -> alu_op_a;
+                    regright[right]@{clk} -> alu_op_b;
+                    alu_result@{clk+3}<31:0> -> regin[out]@{clk+4};
+                    pc@{clk} + 1'b -> pc@{clk+1};
+                    states::wait -> state@{clk+1};
+                    states::wait -> state@{clk+2};
+                    states::wait -> state@{clk+3};
+                    states::exec -> state@{clk+4};
+                    '0 -> overflow@{clk+1};
+                }
+                bre(_, target, _) => {
+                    if regleft[left]@{clk} == regright[right]@{clk} {
+                        reg[target]@{clk} -> pc@{clk+1};
+                    } else {
+                        pc@{clk} + 1'b -> pc@{clk+1};
+                    };
+                    states::exec -> state@{clk+1};
+                    '0 -> overflow@{clk+1};
+                }
+                load(_, addr, reg, _) => {
+                    mem_out[reg_left[addr]@{clk}]@{clk+1} -> reg_in[reg]@{clk+2};
+                    states::wait -> state@{clk+1};
+                    states::exec -> state@{clk+2};
+                    pc@{clk} + 1'b -> pc@{clk+1};
+                    '0 -> overflow@{clk+1};
+                }
+                store(_, addr, reg, _) => {
+                    reg_in[reg]@{clk} -> mem_in[reg_left[reg]@{clk}]@{clk+1};
+                    '1 -> mem_wr;
+                    states::wait -> state@{clk+1};
+                    states::exec -> state@{clk+2};
+                }
+                nop(_)  => {
+                    pc@{clk} + 1'b -> pc@{clk+1};
+                }
+            }
         }
-	states::wait => {}
-	}
+        states::wait => {
+            * -> *;
+        }
     }
 }
 
@@ -152,7 +154,7 @@ encoding bcd;
 
 module bcd<L, T=L+(L-4)/3>::decode<data<bcd<L>>, data<signed<T>>> (input::data<bcd<L>>) => (output::data<signed<T>>)
 {
-	....
+        ....
 }
 
 operator *::adder<A, B, Y>(left::data<A>, right::data<B>) => (output::data<Y>);
