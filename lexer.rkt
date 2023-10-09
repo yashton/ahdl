@@ -18,7 +18,10 @@
       (brag-token 'COMMENT lexeme #:skip? #t)]
      [(:+ whitespace)
       (brag-token 'WHITESPACE lexeme #:skip? #t)]
+     [(:: "`" (:+ (complement "`")) "`")
+      (brag-token 'IDENTIFIER (string->symbol (string-trim lexeme "`")))]
      [(:or "let" "if" "else" "match" "when" "as" "data" "ctrl" "clock" "address"
+           "namespace" "use"
            "signed" "unsigned" "type" "enum" "union" "struct" "encoding"
            "module" "bind" "'?" "'0" "'1")
       (brag-token lexeme lexeme)]
@@ -37,10 +40,9 @@
       (brag-token 'SEXIMAL lexeme)]
      [(:seq (:or alphabetic numeric) "'n")
       (brag-token 'NIF lexeme)]
-
      [(:or ">=" "<=" "=>" "->" "<-" "!=" "==" "&&" "||" "::" ":=" "<<")
       (brag-token lexeme lexeme)]
-     [(char-set "[]{}<>();&|^%*/+!~-,@:.") ;; unused symbols #$`
+     [(char-set "[]{}<>();&|^%*/+!~-,@:.$") ;; unused symbols #
       (brag-token lexeme lexeme)]
      [(:+ numeric)
       (brag-token 'NUMBER (string->number lexeme))]

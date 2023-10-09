@@ -1,8 +1,16 @@
 #lang brag
-hardware: (enum_def | union_def | struct_def | module_def | type_alias | type | expr | bind_def)*
+hardware: top*
 
-;; ;;;;;;;;;;;;;;;; Literals ;;;;;;;;;;;;;;;;
-;; ; Allowed to use a generic name
+@top: enum_def | union_def | struct_def | module_def | type_alias | type | expr | bind_def | namespace_def | use_def
+;;;;;;;;;;;;;;;; Namespaces ;;;;;;;;;;;;;;;;
+use_def: /"use" namespace_ref use_aliases?
+use_aliases: (/"::" /"{" [use_alias (/";" use_alias)*] /"}")?
+use_alias: IDENTIFIER /"->" IDENTIFIER
+@namespace_ref: IDENTIFIER | "*" | op_namespace
+@op_namespace: IDENTIFIER /"::" namespace_ref
+namespace_def: /"namespace" [IDENTIFIER (/"::" IDENTIFIER)*] /"{" top* /"}"
+;;;;;;;;;;;;;;;; Literals ;;;;;;;;;;;;;;;;
+; Allowed to use a generic name
 @size_def: /"<" (NUMBER? | IDENTIFIER)? /">"
 
 @literal: splat_literal | binary_literal | octal_literal | decimal_literal | hex_literal | ascii_literal
@@ -47,11 +55,11 @@ id_def: /"[" IDENTIFIER size_def? /"]"
 ;;;;;;;; Unions ;;;;;;;;
 union_def: /"union" IDENTIFIER size_def? id_def? /"{" [union_item (/"," union_item)*] /"}"
 union_item: IDENTIFIER /"(" [union_item_member (/"," union_item_member)*] /")"
-union_item_member: (IDENTIFIER /"::" type) | id_name | literal
+union_item_member: (IDENTIFIER /":" type) | id_name | literal
 
 ;;;;;;;; Structs ;;;;;;;;
 struct_def: /"struct" IDENTIFIER size_def? /"(" [struct_item (/"," struct_item)*] /")"
-struct_item: (IDENTIFIER /"::" type) | literal
+struct_item: (IDENTIFIER /":" type) | literal
 
 ;;;;;;;;;;;;;;;; Definitions ;;;;;;;;;;;;;;;;
 ; Should allow positive edge, negative edge, or level trigger?
@@ -72,9 +80,9 @@ bind_args: [left_binding (/";" left_binding)*]
 ;;;;;;;;;;;;;;;; Modules ;;;;;;;;;;;;;;;;
 ; Look into numeric parameters
 module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" module_body /"}"
-module_body: (module_def | enum_def | union_def | struct_def | type_alias | bind_def | let_expr)*
+module_body: (module_def | enum_def | union_def | struct_def | type_alias | bind_def | let_expr | use_def)*
 argument_list: /"(" [argument (/";" argument)*] /")"
-argument: IDENTIFIER addr_ref? /"::" type
+argument: IDENTIFIER addr_ref? /":" type
 
 module_instance: IDENTIFIER module_generics?  module_clock_binding? module_input_binding
 module_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
@@ -85,14 +93,15 @@ module_generics: /"<" [type (/"," type)*] /">"
 ; Expressions have two types - value expression (expr) or binding expressions (bind)
 ; bindings can't be used with operators
 ; when a top bind operation happens, if the RHS is a bindings, the bindings are applied to the outer scope
-reference: IDENTIFIER addr_ref? clk_ref?
+reference: ref_id addr_ref? clk_ref?
+ref_id: IDENTIFIER (/"::" IDENTIFIER)*
 @addr_ref: addr_use_ref | addr_loc_ref
 addr_use_ref: /"[" expr /"]"
 addr_loc_ref: /"@" /"[" expr /"]"
 clk_ref: /"@" /"{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
 
 @expr: let_expr | if_expr | match_expr | or_expr | type_hint
-type_hint: expr /"::" type
+type_hint: expr /":" type
 
 ;;;;;;;;;;;;;;;; Operators ;;;;;;;;;;;;;;;;
 ;; This matches C precedence
@@ -101,7 +110,7 @@ type_hint: expr /"::" type
 tuple_expr: /"(" [expr (/"," expr)+] /")"
 
 @instance_expr: primary_expr | struct_instance | union_instance
-union_instance: IDENTIFIER /"::" IDENTIFIER /"(" [expr (/"," expr)*] /")"
+union_instance: IDENTIFIER /":" IDENTIFIER /"(" [expr (/"," expr)*] /")"
 struct_instance: IDENTIFIER /"(" [expr (/"," expr)*] /")"
 
 @postfix_expr: instance_expr | op_member
@@ -183,7 +192,7 @@ let_expr: let_clause /"{" expr /"}"
 @let_clause: /"let" (let_left_bind | /"(" let_left_bind /")")
 let_left_bind: [left_binding (/"," left_binding)*]
 ;; destructure: "(" [destructure_item, ("," destructure_item)*] ")"
-;; destructure_item: IDENTIFIER | (IDENTIFIER "::" type) | destructure | (IDENTIFIER destructure) | literal
+;; destructure_item: IDENTIFIER | (IDENTIFIER ":" type) | destructure | (IDENTIFIER destructure) | literal
 ;;destructure: literal | IDENTIFIER | destructure_tuple | destructure_union | destructure_struct | destructure_slices | destructure_binding | reference
 destructure: expr
 ;; destructure cases:

@@ -35,7 +35,8 @@
              (list let_expr
                    (list let_left_bind
                          (list left_binding x d))
-                            (list reference x))) d]))
+                   (list reference
+                         (list ref_id x)))) d]))
   (define (parse-test-type-hint code)
     (match (parse-test code)
       [(list hardware d) d]))
@@ -79,7 +80,7 @@
      [test-case "Hex" (check-equal? (parse-test-literal "fda14097'x")
                                     '(hex_literal "fda14097'x"))]
      [test-case "Hex single symbol" (check-equal? (parse-test-literal "A'x")
-                                    '(hex_literal "A'x"))]
+                                                  '(hex_literal "A'x"))]
      [test-case "Hex sized" (check-equal? (parse-test-literal "fda34'x<32>")
                                           '(hex_literal "fda34'x" 32))]
      [test-case "Hex don't care" (check-equal? (parse-test-literal "?fa92?'x")
@@ -116,38 +117,38 @@
     (test-suite
      "type definition parsing"
      [test-case "sized data type"
-       (check-equal? (parse-test-type-hint "1'b::data<2>")
+       (check-equal? (parse-test-type-hint "1'b:data<2>")
                      '(type_hint (binary_literal "1'b")
                                  (data_type (encoding_unsigned 2))))]
      [test-case "implicit size data type"
-       (check-equal? (parse-test-type-hint "1'b::data")
+       (check-equal? (parse-test-type-hint "1'b:data")
                      '(type_hint (binary_literal "1'b") (data_type)))]
      [test-case "implicit size data type sized literal"
-       (check-equal? (parse-test-type-hint "1'b<3>::data")
+       (check-equal? (parse-test-type-hint "1'b<3>:data")
                      '(type_hint (binary_literal "1'b" 3) (data_type)))]
      [test-case "signed datatype"
-       (check-equal? (parse-test-type-hint "1'b::data<signed<2>>")
+       (check-equal? (parse-test-type-hint "1'b:data<signed<2>>")
                      '(type_hint (binary_literal "1'b")
                                  (data_type (encoding_signed 2))))]
      [test-case "unsigned datatype"
-       (check-equal? (parse-test-type-hint "1'b::data<unsigned<2>>")   '(type_hint (binary_literal "1'b") (data_type (encoding_unsigned 2))))]
+       (check-equal? (parse-test-type-hint "1'b:data<unsigned<2>>")   '(type_hint (binary_literal "1'b") (data_type (encoding_unsigned 2))))]
      [test-case "implicit control type"
-       (check-equal? (parse-test-type-hint "1'b::ctrl")
+       (check-equal? (parse-test-type-hint "1'b:ctrl")
                      '(type_hint (binary_literal "1'b") (ctrl_type)))]
      [test-case "sized control type"
-       (check-equal? (parse-test-type-hint "1'b::ctrl<2>")   '(type_hint (binary_literal "1'b") (ctrl_type (encoding_unsigned 2))))]
+       (check-equal? (parse-test-type-hint "1'b:ctrl<2>")   '(type_hint (binary_literal "1'b") (ctrl_type (encoding_unsigned 2))))]
      [test-case "struct/enum type"
-       (check-equal? (parse-test-type-hint "foo::data<bar>")
-                     '(type_hint (reference foo)
+       (check-equal? (parse-test-type-hint "foo:data<bar>")
+                     '(type_hint (reference (ref_id foo))
                                  (data_type (encoding_generic bar))))]
      [test-case "struct/enum type with generic"
-       (check-equal? (parse-test-type-hint "foo::ctrl<bar<2>>")
-                     '(type_hint (reference foo)
+       (check-equal? (parse-test-type-hint "foo:ctrl<bar<2>>")
+                     '(type_hint (reference (ref_id foo))
                                  (ctrl_type (encoding_generic bar (encoding_unsigned 2)))))]
 
      [test-case "struct/enum type with generic parameter"
-       (check-equal? (parse-test-type-hint "foo::ctrl<bar<T>>")
-                     '(type_hint (reference foo)
+       (check-equal? (parse-test-type-hint "foo:ctrl<bar<T>>")
+                     '(type_hint (reference (ref_id foo))
                                  (ctrl_type (encoding_generic bar (encoding_generic T)))))]))
 
   (define enum-def-tests
@@ -174,7 +175,7 @@
                         (id_name shiftl 2)
                         (id_name shiftr)
                         (id_name mult))))]
-    [test-case "enum with id with size"
+     [test-case "enum with id with size"
        (check-equal? (parse-test "enum ops[id<3>] { add[0], sub[5], shiftl[2], shiftr, mult }")
                      '(hardware
                        (enum_def
@@ -190,7 +191,7 @@
      "Tests for union definition"
      [test-case "Union with implicit sizes and id"
        (check-equal?
-        (parse-test "union instruction { add(id, num::data<4>), beq(id, reg::ctrl<4>) }")
+        (parse-test "union instruction { add(id, num:data<4>), beq(id, reg:ctrl<4>) }")
         '(hardware
           (union_def
            instruction
@@ -204,7 +205,7 @@
             (union_item_member reg (ctrl_type (encoding_unsigned 4)))))))]
      [test-case "Union with explicit sizes and id"
        (check-equal?
-        (parse-test "union instruction<32>[thing<2>] { add(thing[0], num::data<4>, '?), beq(thing, reg::ctrl<4>, '?) }")
+        (parse-test "union instruction<32>[thing<2>] { add(thing[0], num:data<4>, '?), beq(thing, reg:ctrl<4>, '?) }")
         '(hardware
           (union_def
            instruction
@@ -226,11 +227,11 @@
      [test-case
          "Union instance creation"
        (check-equal?
-        (parse-test-expr "thing::second(A'x + foo, 1011'b, '?)")
+        (parse-test-expr "thing:second(A'x + foo, 1011'b, '?)")
         '(union_instance
           thing
           second
-          (op_add (hex_literal "A'x") (reference foo))
+          (op_add (hex_literal "A'x") (reference (ref_id foo)))
           (binary_literal "1011'b")
           (splat_literal "'?")))]))
   (define struct-def-tests
@@ -238,7 +239,7 @@
      "struct definition"
      [test-case "Struct with implicit sizes"
        (check-equal?
-        (parse-test-expr "struct thing(left::data<4>, right::ctrl<4>)")
+        (parse-test-expr "struct thing(left:data<4>, right:ctrl<4>)")
         '(struct_def
           thing
           (struct_item left (data_type (encoding_unsigned 4)))
@@ -246,7 +247,7 @@
      [test-case
          "Struct with explicit sizes and id"
        (check-equal?
-        (parse-test "struct thing<12>(num::data<4>, reg::ctrl<4>, '?)")
+        (parse-test "struct thing<12>(num:data<4>, reg:ctrl<4>, '?)")
         '(hardware
           (struct_def
            thing
@@ -264,23 +265,23 @@
         (parse-test-expr "thing(A'x + foo, 1011'b, '?)")
         '(struct_instance
           thing
-          (op_add (hex_literal "A'x") (reference foo))
+          (op_add (hex_literal "A'x") (reference (ref_id foo)))
           (binary_literal "1011'b")
           (splat_literal "'?")))]))
 
   (define conditional-tests
-   (test-suite
+    (test-suite
      "Conditional block tests"
      [test-case "if/else"
        (check-equal? (parse-test-expr "if foo { 110'b } else { 111'b }")
-                     '(if_expr (reference foo)
+                     '(if_expr (reference (ref_id foo))
                                (binary_literal "110'b")
                                (binary_literal "111'b")))]
      [test-case "if/else if/else"
        (check-equal? (parse-test-expr "if foo { 110'b } else if bar { 111'b } else { 0'b }")
-                     '(if_expr (reference foo)
+                     '(if_expr (reference (ref_id foo))
                                (binary_literal "110'b")
-                               (if_expr (reference bar)
+                               (if_expr (reference (ref_id bar))
                                         (binary_literal "111'b")
                                         (binary_literal "0'b"))))]
      [test-case "if/else if/else if/else"
@@ -289,13 +290,13 @@
                                       else if a == b { 1'b }
                                       else { 0'b }")
                      '(if_expr
-                       (reference foo)
+                       (reference (ref_id foo))
                        (binary_literal "110'b")
                        (if_expr
-                        (reference bar)
+                        (reference (ref_id bar))
                         (binary_literal "111'b")
                         (if_expr
-                         (op_eq (reference a) (reference b))
+                         (op_eq (reference (ref_id a)) (reference (ref_id b)))
                          (binary_literal "1'b")
                          (binary_literal "0'b")))))]))
   (define match-tests
@@ -304,7 +305,7 @@
      [test-case "simple match"
        (check-equal? (parse-test-expr "match foo { 0'b => { 1'b } 1'b => { 0'b }}")
                      '(match_expr
-                       (reference foo)
+                       (reference (ref_id foo))
                        (match_expr_case (destructure (binary_literal "0'b"))
                                         (binary_literal "1'b"))
                        (match_expr_case (destructure (binary_literal "1'b"))
@@ -315,23 +316,30 @@
                                          1'b => 0'b
                                        }")
                      '(match_expr
-                       (reference foo)
+                       (reference (ref_id foo))
                        (match_expr_case (destructure (binary_literal "0'b"))
                                         (binary_literal "1'b"))
                        (match_expr_case (destructure (binary_literal "1'b"))
                                         (binary_literal "0'b"))))]
+     [test-case "enum match"
+       (check-equal?
+        (parse-test-expr "match foo { ops::one => { 1'b } ops::zero => { 0'b }}")
+        '(match_expr
+          (reference (ref_id foo))
+          (match_expr_case (destructure (reference (ref_id ops one))) (binary_literal "1'b"))
+          (match_expr_case (destructure (reference (ref_id ops zero))) (binary_literal "0'b"))))]
      [test-case "simple match with guard and fallback"
        (check-equal? (parse-test-expr "match foo {
                                          a when a == 1'b => 1'b
                                          _ => 0'b
                                        }")
-  '(match_expr
-    (reference foo)
-    (match_expr_case
-     (destructure (reference a))
-     (op_eq (reference a) (binary_literal "1'b"))
-     (binary_literal "1'b"))
-    (match_expr_case (destructure (reference _)) (binary_literal "0'b"))))]))
+                     '(match_expr
+                       (reference (ref_id foo))
+                       (match_expr_case
+                        (destructure (reference (ref_id a)))
+                        (op_eq (reference (ref_id a)) (binary_literal "1'b"))
+                        (binary_literal "1'b"))
+                       (match_expr_case (destructure (reference (ref_id _))) (binary_literal "0'b"))))]))
   (define let-tests
     (test-suite
      "let and destructuring"
@@ -341,16 +349,16 @@
                      '(let_expr
                        (let_left_bind
                         (left_binding a (binary_literal "1'b")))
-                       (reference a)))]
+                       (reference (ref_id a))))]
      [test-case
          "multiple bindings"
        (check-equal? (parse-test-expr "let a <- d, b <- 1'b, c <- f & b { a + c }")
                      '(let_expr
                        (let_left_bind
-                        (left_binding a (reference d))
+                        (left_binding a (reference (ref_id d)))
                         (left_binding b (binary_literal "1'b"))
-                        (left_binding c (op_band (reference f) (reference b))))
-                       (op_add (reference a) (reference c))))]))
+                        (left_binding c (op_band (reference (ref_id f)) (reference (ref_id b)))))
+                       (op_add (reference (ref_id a)) (reference (ref_id c)))))]))
 
 
   (define ops-tests
@@ -359,37 +367,37 @@
      [test-case
          "precedence 0"
        (check-equal? (parse-test-expr "b.f<1> as data<foo>")
-                     '(op_cast (op_index (op_member (reference b) f)
+                     '(op_cast (op_index (op_member (reference (ref_id b)) f)
                                          1)
                                (data_type (encoding_generic foo))))]
      [test-case
          "precedence 0 > 1"
        (check-equal? (parse-test-expr "i * b.f")
-                     '(op_mult (reference i) (op_member (reference b) f)))]
+                     '(op_mult (reference (ref_id i)) (op_member (reference (ref_id b)) f)))]
      [test-case
          "precedence 1 left to right associative multiplication"
        (check-equal? (parse-test-expr "i * j / k % l ")
                      '(op_mod
                        (op_div
                         (op_mult
-                         (reference i)
-                         (reference j))
-                        (reference k))
-                       (reference l)))]
+                         (reference (ref_id i))
+                         (reference (ref_id j)))
+                        (reference (ref_id k)))
+                       (reference (ref_id l))))]
      [test-case
          "precedence 1 > 2"
        (check-equal? (parse-test-expr "i * j + k % l ")
-                     '(op_add (op_mult (reference i) (reference j))
-                              (op_mod (reference k) (reference l))))]
+                     '(op_add (op_mult (reference (ref_id i)) (reference (ref_id j)))
+                              (op_mod (reference (ref_id k)) (reference (ref_id l)))))]
      [test-case
          "left to right associative addition"
        (check-equal? (parse-test-expr "a + b - c")
-                     '(op_sub (op_add (reference a) (reference b)) (reference c)))]
+                     '(op_sub (op_add (reference (ref_id a)) (reference (ref_id b))) (reference (ref_id c))))]
      [test-case
          "cast precedence"
        (check-equal? (parse-test-expr "a + b as data")
-                     '(op_add (reference a)
-                              (op_cast (reference b) (data_type))))]
+                     '(op_add (reference (ref_id a))
+                              (op_cast (reference (ref_id b)) (data_type))))]
      [test-case
          "unary precedence god test"
        (check-equal? (parse-test-expr "!~-+b.a<2:1><1>")
@@ -399,54 +407,54 @@
                          (op_pos
                           (op_index
                            (op_slice
-                            (op_member (reference b) a)
+                            (op_member (reference (ref_id b)) a)
                             2 1)
                            1))))))]
      [test-case
          "precedence god test"
        (check-equal? (parse-test-expr "t || s && r | q ^ p & o != n == m >= l <= k > j < i >> h << g - f + e % d / c * !~-+b.a<2:1><1>")
                      '(op_or
-                       (reference t)
+                       (reference (ref_id t))
                        (op_and
-                        (reference s)
+                        (reference (ref_id s))
                         (op_bor
-                         (reference r)
+                         (reference (ref_id r))
                          (op_bxor
-                          (reference q)
+                          (reference (ref_id q))
                           (op_band
-                           (reference p)
+                           (reference (ref_id p))
                            (op_neq
-                            (reference o)
+                            (reference (ref_id o))
                             (op_eq
-                             (reference n)
+                             (reference (ref_id n))
                              (op_gte
-                              (reference m)
+                              (reference (ref_id m))
                               (op_lte
-                               (reference l)
+                               (reference (ref_id l))
                                (op_gt
-                                (reference k)
+                                (reference (ref_id k))
                                 (op_lt
-                                 (reference j)
+                                 (reference (ref_id j))
                                  (op_shiftr
-                                  (reference i)
+                                  (reference (ref_id i))
                                   (op_shiftl
-                                   (reference h)
+                                   (reference (ref_id h))
                                    (op_sub
-                                    (reference g)
+                                    (reference (ref_id g))
                                     (op_add
-                                     (reference f)
+                                     (reference (ref_id f))
                                      (op_mod
-                                      (reference e)
+                                      (reference (ref_id e))
                                       (op_div
-                                       (reference d)
+                                       (reference (ref_id d))
                                        (op_mult
-                                        (reference c)
+                                        (reference (ref_id c))
                                         (op_not
                                          (op_bnot
                                           (op_neg
                                            (op_pos
                                             (op_index
-                                             (op_slice (op_member (reference b) a) 2 1)
+                                             (op_slice (op_member (reference (ref_id b)) a) 2 1)
                                              1))))))))))))))))))))))))]
      [test-case
          "precedence god reverse test"
@@ -469,25 +477,25 @@
                                      (op_mod
                                       (op_div
                                        (op_mult
-                                        (reference a)
-                                        (reference b))
-                                       (reference c))
-                                      (reference d))
-                                     (reference e))
-                                    (reference f))
-                                   (reference g))
-                                  (reference h))
-                                 (reference i))
-                                (reference j))
-                               (reference k))
-                              (reference l))
-                             (reference m))
-                            (reference n))
-                           (reference o))
-                          (reference p))
-                         (reference r))
-                        (reference s))
-                       (reference t)))]))
+                                        (reference (ref_id a))
+                                        (reference (ref_id b)))
+                                       (reference (ref_id c)))
+                                      (reference (ref_id d)))
+                                     (reference (ref_id e)))
+                                    (reference (ref_id f)))
+                                   (reference (ref_id g)))
+                                  (reference (ref_id h)))
+                                 (reference (ref_id i)))
+                                (reference (ref_id j)))
+                               (reference (ref_id k)))
+                              (reference (ref_id l)))
+                             (reference (ref_id m)))
+                            (reference (ref_id n)))
+                           (reference (ref_id o)))
+                          (reference (ref_id p)))
+                         (reference (ref_id r)))
+                        (reference (ref_id s)))
+                       (reference (ref_id t))))]))
 
   (define module-tests
     (test-suite
@@ -496,7 +504,7 @@
          "Basic module"
        (check-equal?
         (parse-test-module
-         "module add(left::data<16>; right::data<16>) => (output::data<17>) {}")
+         "module add(left:data<16>; right:data<16>) => (output:data<17>) {}")
         '(module_def
           add
           (argument_list
@@ -510,7 +518,7 @@
        (check-equal?
         (parse-test-module
          "module mux<S>[element<S>]
-         (target@[element]::data<S>) => (output[element]::data<16>)
+         (target@[element]:data<S>) => (output[element]:data<16>)
          {
              bind output[element] <= target@[element]
          }")
@@ -521,23 +529,23 @@
           (argument_list
            (argument
             target
-            (addr_loc_ref (reference element))
+            (addr_loc_ref (reference (ref_id element)))
             (data_type (encoding_generic S))))
           (argument_list
            (argument
             output
-            (addr_use_ref (reference element))
+            (addr_use_ref (reference (ref_id element)))
             (data_type (encoding_unsigned 16))))
           (module_body
            (bind_def
-            (bind_lhs (reference output (addr_use_ref (reference element))))
-            (bind_rhs (reference target (addr_loc_ref (reference element))))))))]
+            (bind_lhs (reference (ref_id output) (addr_use_ref (reference (ref_id element)))))
+            (bind_rhs (reference (ref_id target) (addr_loc_ref (reference (ref_id element)))))))))]
      [test-case
          "Module with template variable and clock"
        (check-equal?
         (parse-test-module
          "module mux<S>[element<S>]@{clk}
-         (target@[element]::data<S>) => (output[element]::data<16>)
+         (target@[element]:data<S>) => (output[element]:data<16>)
          {
              bind output[element] <= target@[element]
          }")
@@ -549,17 +557,17 @@
           (argument_list
            (argument
             target
-            (addr_loc_ref (reference element))
+            (addr_loc_ref (reference (ref_id element)))
             (data_type (encoding_generic S))))
           (argument_list
            (argument
             output
-            (addr_use_ref (reference element))
+            (addr_use_ref (reference (ref_id element)))
             (data_type (encoding_unsigned 16))))
           (module_body
            (bind_def
-            (bind_lhs (reference output (addr_use_ref (reference element))))
-            (bind_rhs (reference target (addr_loc_ref (reference element))))))))]))
+            (bind_lhs (reference (ref_id output) (addr_use_ref (reference (ref_id element)))))
+            (bind_rhs (reference (ref_id target) (addr_loc_ref (reference (ref_id element)))))))))]))
 
 
   (define module-instance-tests
@@ -570,39 +578,39 @@
        (check-equal?
         (parse-test-bind "bind y <= adder (a -> left; b -> right)")
         '(bind_def
-          (bind_lhs (reference y))
+          (bind_lhs (reference (ref_id y)))
           (bind_rhs
            (module_instance
             adder
             (module_input_binding
-             (right_binding (reference a) (reference left))
-             (right_binding (reference b) (reference right)))))))]
+             (module_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (module_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]
      [test-case
          "Instance with generics"
        (check-equal?
         (parse-test-bind "bind y <= adder (a -> left; b -> right)")
         '(bind_def
-          (bind_lhs (reference y))
+          (bind_lhs (reference (ref_id y)))
           (bind_rhs
            (module_instance
             adder
             (module_input_binding
-             (right_binding (reference a) (reference left))
-             (right_binding (reference b) (reference right)))))))]
+             (module_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (module_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]
      [test-case
          "Instance with generics and clock"
        (check-equal?
         (parse-test-bind "bind y <= adder<unsigned<3>>@{clk} (a -> left; b -> right)")
         '(bind_def
-          (bind_lhs (reference y))
+          (bind_lhs (reference (ref_id y)))
           (bind_rhs
            (module_instance
             adder
             (module_generics (encoding_unsigned 3))
             (module_clock_binding clk)
             (module_input_binding
-             (right_binding (reference a) (reference left))
-             (right_binding (reference b) (reference right)))))))]))
+             (module_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (module_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]))
 
 
   (define binding-expr-tests
@@ -624,17 +632,21 @@
           (bind_rhs
            (binding
             (if_bind
-             (reference set)
+             (reference (ref_id set))
              (binding
-              (right_binding (reference target (clk_ref clk)) (reference addr (clk_ref clk "+" 1))))
+              (right_binding
+               (reference (ref_id target) (clk_ref clk))
+               (reference (ref_id addr) (clk_ref clk "+" 1))))
              (if_bind
-              (reference incr)
+              (reference (ref_id incr))
               (binding
                (right_binding
-                (op_add (reference addr (clk_ref clk)) (binary_literal "1'b"))
-                (reference addr (clk_ref clk "+" 1))))
+                (op_add (reference (ref_id addr) (clk_ref clk)) (binary_literal "1'b"))
+                (reference (ref_id addr) (clk_ref clk "+" 1))))
               (binding
-               (right_binding (reference addr (clk_ref clk)) (reference addr (clk_ref clk "+" 1))))))))))]))
+               (right_binding
+                (reference (ref_id addr) (clk_ref clk))
+                (reference (ref_id addr) (clk_ref clk "+" 1))))))))))]))
 
   (define binding-tests
     (test-suite
@@ -643,7 +655,17 @@
          "simple module instance"
        (check-equal?
         (parse-test "bind alu <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)")
-        '())]))
+        '(hardware
+          (bind_def
+           (bind_lhs (reference (ref_id alu)))
+           (bind_rhs
+            (module_instance
+             arith_logic_unit
+             (module_clock_binding clk)
+             (module_input_binding
+              (module_input_arg (right_binding (reference (ref_id alu_op_a)) (reference (ref_id a))))
+              (module_input_arg (right_binding (reference (ref_id alu_op_b)) (reference (ref_id b))))
+              (module_input_arg (right_binding (reference (ref_id alu_op)) (reference (ref_id op))))))))))]))
 
 
   (define reference-tests
@@ -651,45 +673,100 @@
      "reference instances"
      [test-case
          "Bare"
-       (check-equal? (parse-test-reference "foo") '(reference foo))]
+       (check-equal?
+        (parse-test-reference "foo")
+        '(reference (ref_id foo)))]
+     [test-case
+         "escaped keyword"
+       (check-equal?
+        (parse-test-reference "`data`")
+        '(reference (ref_id data)))]
      [test-case
          "With addresss"
        (check-equal?
         (parse-test-reference "foo[addr]")
-        '(reference foo (addr_use_ref (reference addr))))]
+        '(reference (ref_id foo) (addr_use_ref (reference (ref_id addr)))))]
      [test-case
          "With addresss sub-expr"
        (check-equal?
         (parse-test-reference "foo[f'x]")
-        '(reference foo (addr_use_ref (hex_literal "f'x"))))]
+        '(reference (ref_id foo) (addr_use_ref (hex_literal "f'x"))))]
      [test-case
          "With addresss number"
        (check-equal?
         (parse-test-reference "foo[addr + 1'b]")
-        '(reference foo (addr_use_ref (op_add (reference addr) (binary_literal "1'b")))))]
+        '(reference (ref_id foo) (addr_use_ref (op_add (reference (ref_id addr)) (binary_literal "1'b")))))]
      [test-case
          "With address location"
-       (check-equal? (parse-test-reference "foo@[addr]") '(reference foo (addr_loc_ref (reference addr))))]
+       (check-equal?
+        (parse-test-reference "foo@[addr]")
+        '(reference (ref_id foo) (addr_loc_ref (reference (ref_id addr)))))]
      [test-case
          "With clock"
-       (check-equal? (parse-test-reference "foo@{clk}") '(reference foo (clk_ref clk)))]
+       (check-equal?
+        (parse-test-reference "foo@{clk}")
+        '(reference (ref_id foo) (clk_ref clk)))]
      [test-case
          "With clock offset"
        (check-equal?
-        (parse-test-reference "foo@{clk-2}") '(reference foo (clk_ref clk "-" 2)))]
+        (parse-test-reference "foo@{clk-2}")
+        '(reference (ref_id foo) (clk_ref clk "-" 2)))]
      [test-case
          "With address and clock"
        (check-equal?
         (parse-test-reference "foo[addr]@{clk}")
-        '(reference foo (addr_use_ref (reference addr)) (clk_ref clk)))]
+        '(reference (ref_id foo) (addr_use_ref (reference (ref_id addr))) (clk_ref clk)))]
      [test-case
          "With address and clock offset"
        (check-equal?
         (parse-test-reference "foo@[addr]@{clk + 2}")
-        '(reference foo (addr_loc_ref (reference addr)) (clk_ref clk "+" 2)))]))
+        '(reference (ref_id foo) (addr_loc_ref (reference (ref_id addr))) (clk_ref clk "+" 2)))]))
 
+  (define namespacing-tests
+    (test-suite
+     "namespacing"
+     [test-case
+         "basic use"
+       (check-equal?
+        (parse-test "use std")
+        '(hardware (use_def std)))]
+     [test-case
+         "nested use"
+       (check-equal?
+        (parse-test "use std::adder")
+        '(hardware (use_def std adder)))]
+     [test-case
+         "use splat"
+       (check-equal?
+        (parse-test "use std::*")
+        '(hardware (use_def std "*")))]
+     [test-case
+         "use rebind"
+       (check-equal?
+        (parse-test "use std::{adder -> fa}")
+        '(hardware (use_def std (use_aliases (use_alias adder fa)))))]
+     [test-case
+         "use multiple rebind"
+       (check-equal?
+        (parse-test "use std::{adder -> fa; mult -> m}")
+        '(hardware (use_def std (use_aliases (use_alias adder fa) (use_alias mult m)))))]
+     [test-case
+         "simple namespace"
+       (check-equal?
+        (parse-test "namespace foo { enum bar {a,b}}")
+        '(hardware (namespace_def foo (enum_def bar (id_name a) (id_name b)))))]
+     [test-case
+         "nested namespace"
+       (check-equal?
+        (parse-test "namespace foo { namespace bar {enum foo {a,b}}}")
+        '(hardware (namespace_def foo (namespace_def bar (enum_def foo (id_name a) (id_name b))))))]
+     [test-case
+         "nested namespace alt"
+       (check-equal?
+        (parse-test "namespace foo::bar {enum foo {a,b}}")
+        '(hardware (namespace_def foo bar (enum_def foo (id_name a) (id_name b)))))]))
 
-
+  (run-tests namespacing-tests)
   (run-tests literal-tests)
   (run-tests type-tests)
   (run-tests type-hint-tests)
