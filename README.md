@@ -72,3 +72,5 @@ Special bind block with bindings if a binding is missing in other code paths.
 ## Reset bindings
 Special bind block with bindings to value on reset
 ```reset@{rst} bind * <= {...}```
+## Recursion
+Modules can be recursively defined.

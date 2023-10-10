@@ -1,4 +1,4 @@
-#lang racket/base
+#lang racket
 (require (prefix-in brag- brag/support))
 (require br-parser-tools/lex)
 (require (prefix-in : br-parser-tools/lex-sre))
@@ -41,8 +41,6 @@
       (brag-token 'SEXIMAL lexeme)]
      [(:seq (:or alphabetic numeric) "'n")
       (brag-token 'NIF lexeme)]
-     [(:+ numeric)
-      (brag-token 'NUMERIC lexeme)
      [(:or ">=" "<=" "=>" "->" "<-" "!=" "==" "&&" "||" "::" ":=" "<<")
       (brag-token lexeme lexeme)]
      [(char-set "[]{}<>();&|^%*/+!~-,@:.$") ;; unused symbols #

@@ -157,9 +157,7 @@ module cpu@{clk} () => ()
                 }
             }
         }
-        states::wait => {
-            * -> *;
-        }
+        states::wait => {;}
     }
 }
 

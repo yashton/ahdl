@@ -79,12 +79,11 @@ bind_def: /"bind" bind_lhs /"<=" binding
 default_def: "default" bind_def
 reset_def: "reset" "@{" IDENTIFIER "}" bind_def
 
-bind_expr_def: /"bind" IDENTIFIER /"<=" expr
+bind_expr_def: /"bind" reference /"<=" expr
 bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
 bind_args: [left_binding (/";" left_binding)*]
 
 ;;;;;;;;;;;;;;;; Modules ;;;;;;;;;;;;;;;;
-; Look into numeric parameters
 module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" module_body_defs /"}"
 module_body_defs: (module_def | enum_def | union_def | struct_def | type_def | bind_def | bind_expr_def | use_def | if_templ_def | for_templ_def | reset_def | default_def | const_def)*
 argument_list: /"(" [argument (/";" argument)*] /")"
@@ -111,9 +110,9 @@ type_hint: expr /":" type
 
 ;;;;;;;;;;;;;;;; Operators ;;;;;;;;;;;;;;;;
 ;; This matches C precedence
-@primary_expr: literal | reference
+@primary_expr: literal | reference | group_expr | join_expr
 @group_expr: /"(" expr /")"
-tuple_expr: /"(" [expr (/"," expr)+] /")"
+join_expr: /"{" [expr (/"," expr)+] /"}"
 
 @instance_expr: primary_expr | struct_instance | union_instance
 union_instance: IDENTIFIER /":" IDENTIFIER /"(" [expr (/"," expr)*] /")"
@@ -194,19 +193,16 @@ op_or: or_expr /"||" and_expr
 ;;;;;;;;;;;;;;;; Let binding and destructuring ;;;;;;;;;;;;;;;;
 left_binding: (IDENTIFIER | destructure) /"<-" (expr | binding)
 let_expr: let_clause /"{" expr /"}"
-@let_clause: /"let" (let_left_bind | /"(" let_left_bind /")")
-let_left_bind: [left_binding (/"," left_binding)*]
-;; destructure: "(" [destructure_item, ("," destructure_item)*] ")"
-;; destructure_item: IDENTIFIER | (IDENTIFIER ":" type) | destructure | (IDENTIFIER destructure) | literal
-;;destructure: literal | IDENTIFIER | destructure_tuple | destructure_union | destructure_struct | destructure_slices | destructure_binding | reference
-destructure: expr
-;; destructure cases:
-destructure_tuple: "missings"
-destructure_union: "missings"
-destructure_struct:"missings"
-destructure_slices:"missings"
-destructure_binding: "missings"
+@let_clause: /"let" (let_items | /"(" let_items /")")
+let_item: left_binding | destructure_binding
+let_items: [let_item (/"," let_item)*]
 
+destructure: reference | literal | destructure_struct | destructure_union
+destructure_struct: IDENTIFIER /"(" [destructure (/"," destructure)*] /")"
+;; Same syntax for unions to use in match. Unions are a compile error if used in let (ambiguous)
+destructure_union: @destructure_struct
+
+destructure_binding: bind_lhs /"<=" binding
 ;;;;;;;;;;;;;;;; Conditional ;;;;;;;;;;;;;;;;
 if_expr: /"if" expr /"{" expr /"}" /"else" else_expr
 @else_expr: (if_expr | (/"{" expr /"}"))
@@ -218,7 +214,7 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
 binding: right_binding | let_bind | if_bind | match_bind | bindset | module_instance | templ_bind
 
-bindset: [binding (/";" binding)*] /";"?
+bindset: ([binding (/";" binding)*] /";"?) | /";"
 right_binding: (expr /"->" reference) | (binding /"->" reference)
 let_bind: let_clause /"{" binding /"}"
 if_bind: /"if" expr /"{" binding /"}" /"else" else_bind
