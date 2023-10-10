@@ -1,8 +1,9 @@
-#lang racket
+#lang racket/base
+
 (require brag/support)
 (require "lexer.rkt" "parser.rkt")
 
-(define filename "example_cpu.ahdl")
+(define filename "examples/cpu.ahdl")
 (define example-file (open-input-file filename))
 (define token-thunk (tokenize filename example-file))
 (define (iter n)

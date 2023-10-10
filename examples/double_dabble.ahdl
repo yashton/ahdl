@@ -1,0 +1,92 @@
+/*
+Verilog implementation from wikipedia
+module bin2bcd
+ #( parameter                W = 18)  // input width
+  ( input      [W-1      :0] bin   ,  // binary
+    output reg [W+(W-4)/3:0] bcd   ); // bcd {...,thousands,hundreds,tens,ones}
+
+  integer i,j;
+
+  always @(bin) begin
+    for(i = 0; i <= W+(W-4)/3; i = i+1) bcd[i] = 0;     // initialize with zeros
+    bcd[W-1:0] = bin;                                   // initialize with input vector
+    for(i = 0; i <= W-4; i = i+1)                       // iterate on structure depth
+      for(j = 0; j <= i/3; j = j+1)                     // iterate on structure width
+        if (bcd[W-i+4*j -: 4] > 4)                      // if > 4
+          bcd[W-i+4*j -: 4] = bcd[W-i+4*j -: 4] + 4'd3; // add 3
+  end
+
+endmodule
+*/
+trait encode<T, U> {
+    module encoder(bin: T) => (enc: U);
+}
+trait decode<T, U> {
+    module decoder(enc: T) => (bin: U);
+}
+
+encoding bcd<S>: unsigned<4*S>;
+
+impl<W, local X=(W+4*ceil(W/3))> encode<data<unsigned<W>>, data:bcd<X>> for bcd<X> {
+    module encoder(input: data<unsigned<W>>) => (output: data<bcd<X>>)
+    {
+        module gt4plus3(in: data<unsigned<4>>) => (out: data<unsigned<4>)
+        {
+            bind out <= if in > 4 { in + 3'd } else { in }
+        }
+
+        module layer(in: data<unsigned<W>>) => (out: data<unsigned<W>>)
+	{
+            bind * <= for i in #range(0, W, 4) {
+                gt4plus3(in<i+4:i>) -> out<i+4:i>
+            }
+        }
+
+        module recurse<depth>(last:data<unsigned<W+X>>, orig:data<unsigned<W+X-depth>>) => (result:data<unsigned<W>>)
+	{
+	    let shift <- {(last << 1), orig<-1>} {
+		bind * <= if depth == X {
+		    shift -> result
+		} else {
+		    bindlet {this_layer <- out} <= layer(shift<-2:>) {
+			let next <- {last<W+X:W+X-depth>, out, orig<-2:>} {
+			    recurse({0'<depth>, shift, 0'<W-depth>}, orig<-2:>) -> result;
+			}
+		    }
+		}
+	    }
+        }
+
+        bind * <= let orig <-  {
+            recurse(W, {'0<W+X>, bin}, {'0<W+X>, bin}) -> out
+        }
+
+    }
+
+   module recurse_alt<depth>(last:data<unsigned<W+X>>, orig:data<unsigned<W+X-depth>>) => (result:data<unsigned<W>>)
+    {
+	let shift <- {last, orig<-1>} {
+	    bind * <= if depth == X {
+		shift -> result
+	    } else {
+		bindlet out <= for i in #range(0, W, 4) {
+		    let window <- in<i+4:i> {
+			if window > 4 { window + 3'd } else { window } -> out<i+4:i>
+		    }
+		} {
+		// This line contributed by Lilith the kitten.
+		//y789%{uyyyyyyyyyyyyyyyyyyyyyyyyyyjv8rgy6ik88888888888888888888888888888888888888888888888888888888888888888888888888888o90p;l//////////////////////////////////////////////////// uv7HJFFFFFF*J((((((((((e))))))))
+		    let next <- {last<W+X:W+X-depth>, out, orig<-2:>} {
+			recurse({shift, 0'<W-depth>}, orig<-2:>) -> result;
+		    }
+		}
+	    }
+	}
+    }
+    // This line contributed by Lilith the kitten.
+    // eeeeeeeeeeEEEEeeeeeeeeeeeeeeeee000000000cxqsjj999999999999cddddddddddddddddddddddddko340s---fg0gggg905xzzzzzzzzz4u555555555555555111111100000222222222222222222222222rrrrro9tttttttttttttttttttttttttttttttttttttttttt9uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo bbbbbbbbuj hyfttttttttttttttttttttttttttttttttttt,,,,,,,,,,,,,,,,,,,,,,,,, hh'''hb    oooooooooooooooooooooooooooooooooooooooooooooooooooo                    999999999        iiiiiii,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,....  77777777777900000000000000000000000000000000000000000000000000000000000000000000000000000000000 p  h8 8h7h.
+
+    bind * <= let orig <-  {
+	recurse(W, {'0<W+X>, bin}, {'0<W+X>, bin}) -> out
+    }
+}

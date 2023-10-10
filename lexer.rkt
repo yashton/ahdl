@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 (require (prefix-in brag- brag/support))
 (require br-parser-tools/lex)
 (require (prefix-in : br-parser-tools/lex-sre))
@@ -24,7 +24,7 @@
            "namespace" "use"
            "signed" "unsigned" "type" "enum" "union" "struct" "encoding"
            "module" "bind" "'?" "'0" "'1")
-      (brag-token lexeme lexeme)]
+      (brag-token (string->symbol lexeme) lexeme)]
      [(:seq "\"" (complement "\"") "\"")
       (brag-token 'ASCII lexeme)]
      [(:seq (:+ (char-set "01?")) "'b")
@@ -40,6 +40,8 @@
       (brag-token 'SEXIMAL lexeme)]
      [(:seq (:or alphabetic numeric) "'n")
       (brag-token 'NIF lexeme)]
+     [(:+ numeric)
+      (brag-token 'NUMERIC lexeme)
      [(:or ">=" "<=" "=>" "->" "<-" "!=" "==" "&&" "||" "::" ":=" "<<")
       (brag-token lexeme lexeme)]
      [(char-set "[]{}<>();&|^%*/+!~-,@:.$") ;; unused symbols #

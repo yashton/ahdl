@@ -97,9 +97,9 @@ module cpu@{clk} () => ()
 {
     use instruction::*
 
-    bind alu <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)
-    bind (reg_left <- reg_left; reg_right <- reg_right) <= regfile@{clk} (reg_in -> reg_in; reg_wr -> reg_in)
-    bind mem_out <= memory<data<u32>>@{clk}(mem_in -> mem_in)
+    bind alu_result <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)
+    bind (reg_left <- reg_left; reg_right <- reg_right) <= regfile@{clk} (reg_in; reg_wr)
+    bind mem_out <= memory<data<u32>>@{clk}(mem_in)
     bind overflow <= reg@{clk}: ctrl<1>
     bind pc <= reg@{clk}: data<u32>
 

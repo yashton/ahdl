@@ -197,3 +197,28 @@ PLL, dividers
 clock domains
 asynchronous triggers
 latches
+* Design ideas
+** Keywords and nomenclature
+Rust uses very short keywords. I've already chosen ctrl instead of control, what about pkg instead of namespace, dev or device instead of module.
+
+The use of the term "reference" is okay, could be just net? The limitation is that a net may not capture the addressable and scheduled nature of the use.
+** write/store flags
+Think of a FIFO or a memory, there's an enable sequence to write.
+** encoding
+Things like int32 and char/ascii can be easy type aliases.
+*** binary encodings
+BCD, gray code, etc. The binary digits have some meaning.
+Need some way to enccode/decode. This could be a module that provides an operator.
+*** type and size parameters
+need some operator like sizeof, given N addresses, give me log2N necessary to store. This is largely covered by the address syntax, but it will come up.
+
+`adder<T, S=T+1> (left: data<T>, right: data<T>) => (out: data<S>)`
+`adder<T<size>> (left: data<T<size>>, right: data<T<size>>) => (out: data<T<size+1>>)`
+*** Templates
+Something like a macro or a generate block.
+The problem with generate: too close to C syntax.
+Reasons to use it:
+
+is that it is really used to create multiple instances
+*** implicits/traits
+What about a scala like implicit - need to add two types, is there an matching adder type in scope? Does this give too much specificity and not leave room for area/delay scheduling choices?

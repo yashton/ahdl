@@ -1,14 +1,15 @@
 #lang brag
-hardware: top*
+hardware: statement*
 
-@top: enum_def | union_def | struct_def | module_def | type_alias | type | expr | bind_def | namespace_def | use_def
+@statement: enum_def | union_def | struct_def | module_def | type_def | namespace_def | use_def | const_def
 ;;;;;;;;;;;;;;;; Namespaces ;;;;;;;;;;;;;;;;
 use_def: /"use" namespace_ref use_aliases?
 use_aliases: (/"::" /"{" [use_alias (/";" use_alias)*] /"}")?
 use_alias: IDENTIFIER /"->" IDENTIFIER
 @namespace_ref: IDENTIFIER | "*" | op_namespace
 @op_namespace: IDENTIFIER /"::" namespace_ref
-namespace_def: /"namespace" [IDENTIFIER (/"::" IDENTIFIER)*] /"{" top* /"}"
+namespace_def: /"namespace" [IDENTIFIER (/"::" IDENTIFIER)*] /"{" statement* /"}"
+
 ;;;;;;;;;;;;;;;; Literals ;;;;;;;;;;;;;;;;
 ; Allowed to use a generic name
 @size_def: /"<" (NUMBER? | IDENTIFIER)? /">"
@@ -24,6 +25,8 @@ decimal_literal: DECIMAL size_def?
 hex_literal: HEX size_def?
 ascii_literal: ASCII size_def?
 
+const_def: /"const" IDENTIFIER "<=" expr
+
 ;;;;;;;;;;;;;;;; Types ;;;;;;;;;;;;;;;;
 ; Need to introduce imports and namespaces
 
@@ -36,16 +39,16 @@ ctrl_type: /"ctrl" (/"<" subtype /">")?
 data_type: /"data" (/"<" subtype /">")?
 
 ; generics
-@subtype: encoding_signed | encoding_unsigned | encoding_generic
+@subtype: encoding_singed | encoding_unsinged | encoding_generic
 encoding_generic: IDENTIFIER (/"<" [subtype (/"," subtype)*] /">")?
-encoding_signed: /("signed" | "s") size_def?
-encoding_unsigned: /("unsigned" | "u") | (/("unsigned" | "u") size_def?) | NUMBER
+encoding_singed: /("signed" | "s") size_def?
+encoding_unsinged: /("unsigned" | "u") | (/("unsigned" | "u") size_def?) | NUMBER
 ; Built in encodings are 2's compliment signed and unsigned ints of bit length.
 ; also aliases, unions, and structs
 ; Leaving room for additional encodings (e.g. BCD, Gray, float) through generics
 
 ;;;;;;;;;;;;;;;; Composite type definitions ;;;;;;;;;;;;;;;;
-type_alias: /"type" IDENTIFIER /":=" subtype
+type_def: /"type" IDENTIFIER /":=" subtype
 
 ;;;;;;;; Enums ;;;;;;;;
 enum_def: /"enum" IDENTIFIER id_def? /"{" [id_name (/"," id_name)*] /"}"
@@ -67,20 +70,23 @@ clk_def: /"@" /"{" ("pos" | "neg" | "lev")? IDENTIFIER /"}"
 addr_id_def: IDENTIFIER size_def?
 addr_def: /"[" [addr_id_def (/"," addr_id_def)*] /"]"
 
-; TODO extend to relative parameters
-template_def: /"<" [IDENTIFIER (/"," IDENTIFIER)*] /">"
+template_def: /"<" [templ_param_def (/"," templ_param_def)*] /">"
+templ_param_def: IDENTIFIER | op_templ_assign
 addr_bind: "@"? /"[" IDENTIFIER /"]"
 
 ;;;;;;;;;;;;;;;; Bind ;;;;;;;;;;;;;;;;
-bind_def: /"bind" bind_lhs /"<=" bind_rhs
-bind_rhs: module_instance | union_instance | struct_instance | binding | expr
+bind_def: /"bind" bind_lhs /"<=" binding
+default_def: "default" bind_def
+reset_def: "reset" "@{" IDENTIFIER "}" bind_def
+
+bind_expr_def: /"bind" IDENTIFIER /"<=" expr
 bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
 bind_args: [left_binding (/";" left_binding)*]
 
 ;;;;;;;;;;;;;;;; Modules ;;;;;;;;;;;;;;;;
 ; Look into numeric parameters
-module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" module_body /"}"
-module_body: (module_def | enum_def | union_def | struct_def | type_alias | bind_def | let_expr | use_def)*
+module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" module_body_defs /"}"
+module_body_defs: (module_def | enum_def | union_def | struct_def | type_def | bind_def | bind_expr_def | use_def | if_templ_def | for_templ_def | reset_def | default_def | const_def)*
 argument_list: /"(" [argument (/";" argument)*] /")"
 argument: IDENTIFIER addr_ref? /":" type
 
@@ -100,7 +106,7 @@ addr_use_ref: /"[" expr /"]"
 addr_loc_ref: /"@" /"[" expr /"]"
 clk_ref: /"@" /"{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
 
-@expr: let_expr | if_expr | match_expr | or_expr | type_hint
+@expr: let_expr | if_expr | match_expr | or_expr | type_hint | templ_expr
 type_hint: expr /":" type
 
 ;;;;;;;;;;;;;;;; Operators ;;;;;;;;;;;;;;;;
@@ -186,8 +192,7 @@ op_and: and_expr /"&&" bor_expr
 op_or: or_expr /"||" and_expr
 
 ;;;;;;;;;;;;;;;; Let binding and destructuring ;;;;;;;;;;;;;;;;
-left_binding: (IDENTIFIER | destructure) /"<-" expr
-
+left_binding: (IDENTIFIER | destructure) /"<-" (expr | binding)
 let_expr: let_clause /"{" expr /"}"
 @let_clause: /"let" (let_left_bind | /"(" let_left_bind /")")
 let_left_bind: [left_binding (/"," left_binding)*]
@@ -211,11 +216,88 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 @match_clause: destructure (/"when" expr)?
 
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
-binding: right_binding | let_bind | if_bind | match_bind | bindset
+binding: right_binding | let_bind | if_bind | match_bind | bindset | module_instance | templ_bind
+
 bindset: [binding (/";" binding)*] /";"?
-right_binding: (expr /"->" reference) | ("*" "->" "*")
+right_binding: (expr /"->" reference) | (binding /"->" reference)
 let_bind: let_clause /"{" binding /"}"
 if_bind: /"if" expr /"{" binding /"}" /"else" else_bind
 @else_bind: (if_bind | (/"{" binding /"}"))
 match_bind: /"match" expr /"{" [match_case_bind (match_case_bind)*] /"}"
 match_case_bind: match_clause "=>" ((/"{" binding /"}") | binding)
+
+;;;;;;;;;;;;;;;; Template expressions ;;;;;;;;;;;;;;;;
+; This is written out explicitly because the types are incompatible with other expressions
+templ_bind: if_templ_bind | for_templ_bind | let_templ_bind
+templ_expr: if_templ_expr | let_templ_expr
+
+op_templ_assign: IDENTIFIER /"=" op_templ_or
+
+templ_op: if_templ | or_templ | op_templ_or
+
+primary_templ: IDENTIFIER | NUMBER | group_templ
+@group_templ: /"(" templ_op /")"
+@unary_templ: primary_templ | op_templ_pos | op_templ_neg | op_templ_not
+op_templ_pos: /"+" primary_templ
+op_templ_neg: /"-" primary_templ
+op_templ_not: /"!" primary_templ
+
+@mult_templ: unary_templ | op_templ_mult
+op_templ_mult: mult_templ /"*" unary_templ
+
+@div_templ: mult_templ | op_templ_div
+op_templ_div: div_templ /"/" mult_templ
+
+@mod_templ: div_templ | op_templ_mod
+op_templ_mod: mod_templ /"%" div_templ
+
+@add_templ: mod_templ | op_templ_add
+op_templ_add: add_templ /"+" mod_templ
+
+@sub_templ: add_templ | op_templ_sub
+op_templ_sub: sub_templ /"-" add_templ
+
+@lt_templ: add_templ | op_templ_lt
+op_templ_lt: lt_templ /"<" add_templ
+
+@gt_templ: lt_templ | op_templ_gt
+op_templ_gt: gt_templ /">" lt_templ
+
+@lte_templ: gt_templ | op_templ_lte
+op_templ_lte: lte_templ /"<=" gt_templ
+
+@gte_templ: lte_templ | op_templ_gte
+op_templ_gte: gte_templ /">=" lte_templ
+
+@eq_templ: gte_templ | op_templ_eq
+op_templ_eq: eq_templ /"==" gte_templ
+
+@neq_templ: eq_templ | op_templ_neq
+op_templ_neq: neq_templ /"!=" eq_templ
+
+@and_templ: neq_templ | op_templ_and
+op_templ_and: and_templ /"&&" neq_templ
+
+@or_templ: and_templ | op_templ_or
+op_templ_or: or_templ /"||" and_templ
+
+let_templ_clause: IDENTIFIER /"<-" templ_expr
+let_templ_bind: let_templ_clause /"{" binding /"}"
+let_templ_expr: let_templ_clause /"{" expr /"}"
+
+if_templ_bind: /"if" templ_op /"{" binding /"}" /"else" else_templ_bind
+@else_templ_bind: (if_templ_bind | (/"{" binding /"}"))
+
+if_templ_expr: /"if" templ_op /"{" expr /"}" /"else" else_templ_expr
+@else_templ_expr: (if_templ_expr | (/"{" expr /"}"))
+
+if_templ: /"if" templ_op /"{" templ_op /"}" /"else" else_templ
+@else_templ: (if_templ | (/"{" templ_op /"}"))
+
+if_templ_def: /"if" templ_op /"{" module_body_defs /"}" /"else" else_templ_def
+@else_templ_def: (if_templ_def | (/"{" module_body_defs /"}"))
+
+templ_generator: "#range" /"(" primary_templ /"," primary_templ (/"," primary_templ)? /")"
+
+for_templ_bind: /"for" IDENTIFIER /"in" templ_generator /"{" binding /"}"
+for_templ_def: /"for" IDENTIFIER /"in" templ_generator /"{" module_body_defs /"}"
