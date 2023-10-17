@@ -19,7 +19,7 @@
      [(:+ whitespace)
       (brag-token 'WHITESPACE lexeme #:skip? #t)]
      [(:: "`" (:+ (complement "`")) "`")
-      (brag-token 'IDENTIFIER (string->symbol (string-trim lexeme "`")))]
+      (brag-token 'IDENTIFIER (string-trim lexeme "`"))]
      [(:or "let" "if" "else" "match" "when" "as" "data" "ctrl" "clock" "address"
            "namespace" "use"
            "signed" "unsigned" "type" "enum" "union" "struct" "encoding"
@@ -48,7 +48,7 @@
      [(:+ numeric)
       (brag-token 'NUMBER (string->number lexeme))]
      [(:+ (:or alphabetic "_" numeric))
-      (brag-token 'IDENTIFIER (string->symbol lexeme))]
+      (brag-token 'IDENTIFIER lexeme)]
      [(eof) 'eof]))
   (define (next-token)
     (let ([n (my-lexer ip)])

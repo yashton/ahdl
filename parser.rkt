@@ -8,7 +8,8 @@ use_aliases: (/"::" /"{" [use_alias (/";" use_alias)*] /"}")?
 use_alias: IDENTIFIER /"->" IDENTIFIER
 @namespace_ref: IDENTIFIER | "*" | op_namespace
 @op_namespace: IDENTIFIER /"::" namespace_ref
-namespace_def: /"namespace" [IDENTIFIER (/"::" IDENTIFIER)*] /"{" statement* /"}"
+namespace_id: [IDENTIFIER (/"::" IDENTIFIER)*]
+namespace_def: /"namespace" namespace_id /"{" statement* /"}"
 
 ;;;;;;;;;;;;;;;; Literals ;;;;;;;;;;;;;;;;
 ; Allowed to use a generic name

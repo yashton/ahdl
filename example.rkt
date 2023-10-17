@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require brag/support)
-(require "lexer.rkt" "parser.rkt")
+(require "lexer.rkt" "parser.rkt" "expander.rkt")
 
 (define filename "examples/cpu.ahdl")
 (define example-file (open-input-file filename))
@@ -15,5 +15,5 @@
 
 ;; (iter token-thunk)
 
-(define another-stx (parse token-thunk))
-(display (syntax->datum another-stx))
+(define parsed (parse token-thunk))
+(print (syntax->datum parsed))

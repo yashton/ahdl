@@ -1,3 +1,4 @@
+#lang reader "../reader.rkt"
 use std::{full_adder -> adder}
 use std::another_adder
 
@@ -159,6 +160,7 @@ module cpu@{clk} () => ()
         }
         states::wait => {;}
     }
+  }
 }
 
 // Weird syntax
@@ -177,4 +179,4 @@ module carry_lookahead<T>: adder<data<T>, data<T>, data<T>>(left: data<s16>, rig
 
 }
 */
-}
+
