@@ -15,16 +15,18 @@ namespace_def: /"namespace" namespace_id /"{" statement* /"}"
 ; Allowed to use a generic name
 @size_def: /"<" (NUMBER? | IDENTIFIER)? /">"
 
-@literal: splat_literal | binary_literal | octal_literal | decimal_literal | hex_literal | ascii_literal
+@literal: splat_literal | binary_literal | seximal_literal | octal_literal | decimal_literal | hex_literal | ascii_literal | nif_literal
 ; Splats can be used to fill in the remaining parts of literal, or a struct, or
 ; as a way to fill a value.
 splat_literal: ("'?" | "'1" | "'0") size_def?
 ; Literals should be clearly marked with their ordinality. Size can be inferred
 binary_literal: BINARY size_def?
+seximal_literal: SEXIMAL size_def?
 octal_literal: OCTAL size_def?
 decimal_literal: DECIMAL size_def?
 hex_literal: HEX size_def?
 ascii_literal: ASCII size_def?
+nif_literal: NIF size_def?
 
 const_def: /"const" IDENTIFIER "<=" expr
 
@@ -192,10 +194,10 @@ op_and: and_expr /"&&" bor_expr
 op_or: or_expr /"||" and_expr
 
 ;;;;;;;;;;;;;;;; Let binding and destructuring ;;;;;;;;;;;;;;;;
-left_binding: (IDENTIFIER | destructure) /"<-" (expr | binding)
+left_binding: destructure /"<-" (expr | binding)
 let_expr: let_clause /"{" expr /"}"
 @let_clause: /"let" (let_items | /"(" let_items /")")
-let_item: left_binding | destructure_binding
+@let_item: left_binding | destructure_binding
 let_items: [let_item (/"," let_item)*]
 
 destructure: reference | literal | destructure_struct | destructure_union
@@ -210,7 +212,7 @@ if_expr: /"if" expr /"{" expr /"}" /"else" else_expr
 
 match_expr: /"match" expr /"{" [match_expr_case (match_expr_case)*] /"}"
 match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
-@match_clause: destructure (/"when" expr)?
+match_clause: destructure (/"when" expr)?
 
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
 binding: right_binding | let_bind | if_bind | match_bind | bindset | device_instance | templ_bind
@@ -220,8 +222,8 @@ right_binding: (expr /"->" reference) | (binding /"->" reference)
 let_bind: let_clause /"{" binding /"}"
 if_bind: /"if" expr /"{" binding /"}" /"else" else_bind
 @else_bind: (if_bind | (/"{" binding /"}"))
-match_bind: /"match" expr /"{" [match_case_bind (match_case_bind)*] /"}"
-match_case_bind: match_clause "=>" ((/"{" binding /"}") | binding)
+match_bind: /"match" expr /"{" [match_bind_case (match_bind_case)*] /"}"
+match_bind_case: match_clause /"=>" ((/"{" binding /"}") | binding)
 
 ;;;;;;;;;;;;;;;; Template expressions ;;;;;;;;;;;;;;;;
 ; This is written out explicitly because the types are incompatible with other expressions
@@ -281,6 +283,7 @@ op_templ_or: or_templ /"||" and_templ
 let_templ_clause: IDENTIFIER /"<-" templ_expr
 let_templ_bind: let_templ_clause /"{" binding /"}"
 let_templ_expr: let_templ_clause /"{" expr /"}"
+let_templ: let_templ_clause /"{" templ_expr /"}"
 
 if_templ_bind: /"if" templ_op /"{" binding /"}" /"else" else_templ_bind
 @else_templ_bind: (if_templ_bind | (/"{" binding /"}"))
