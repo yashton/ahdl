@@ -1,6 +1,6 @@
 /*
 Verilog implementation from wikipedia
-module bin2bcd
+device bin2bcd
  #( parameter                W = 18)  // input width
   ( input      [W-1      :0] bin   ,  // binary
     output reg [W+(W-4)/3:0] bcd   ); // bcd {...,thousands,hundreds,tens,ones}
@@ -16,33 +16,33 @@ module bin2bcd
           bcd[W-i+4*j -: 4] = bcd[W-i+4*j -: 4] + 4'd3; // add 3
   end
 
-endmodule
+enddevice
 */
 trait encode<T, U> {
-    module encoder(bin: T) => (enc: U);
+    device encoder(bin: T) => (enc: U);
 }
 trait decode<T, U> {
-    module decoder(enc: T) => (bin: U);
+    device decoder(enc: T) => (bin: U);
 }
 
 encoding bcd<S>: unsigned<4*S>;
 
 impl<W, local X=(W+4*ceil(W/3))> encode<data<unsigned<W>>, data:bcd<X>> for bcd<X> {
-    module encoder(input: data<unsigned<W>>) => (output: data<bcd<X>>)
+    device encoder(input: data<unsigned<W>>) => (output: data<bcd<X>>)
     {
-        module gt4plus3(in: data<unsigned<4>>) => (out: data<unsigned<4>)
+        device gt4plus3(in: data<unsigned<4>>) => (out: data<unsigned<4>)
         {
             bind out <= if in > 4 { in + 3'd } else { in }
         }
 
-        module layer(in: data<unsigned<W>>) => (out: data<unsigned<W>>)
+        device layer(in: data<unsigned<W>>) => (out: data<unsigned<W>>)
 	{
             bind * <= for i in #range(0, W, 4) {
                 gt4plus3(in<i+4:i>) -> out<i+4:i>
             }
         }
 
-        module recurse<depth>(last:data<unsigned<W+X>>, orig:data<unsigned<W+X-depth>>) => (result:data<unsigned<W>>)
+        device recurse<depth>(last:data<unsigned<W+X>>, orig:data<unsigned<W+X-depth>>) => (result:data<unsigned<W>>)
 	{
 	    let shift <- {(last << 1), orig<-1>} {
 		bind * <= if depth == X {
@@ -63,7 +63,7 @@ impl<W, local X=(W+4*ceil(W/3))> encode<data<unsigned<W>>, data:bcd<X>> for bcd<
 
     }
 
-   module recurse_alt<depth>(last:data<unsigned<W+X>>, orig:data<unsigned<W+X-depth>>) => (result:data<unsigned<W>>)
+   device recurse_alt<depth>(last:data<unsigned<W+X>>, orig:data<unsigned<W+X-depth>>) => (result:data<unsigned<W>>)
     {
 	let shift <- {last, orig<-1>} {
 	    bind * <= if depth == X {

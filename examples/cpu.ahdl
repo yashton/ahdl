@@ -32,7 +32,7 @@ union instruction<32>[id<16>]
     noop(id, '?)
 }
 
-module memory<D>[addr<256>]@{clk} (mem_in[addr]: D; wr_en: ctrl) => (mem_out[addr]: D)
+device memory<D>[addr<256>]@{clk} (mem_in[addr]: D; wr_en: ctrl) => (mem_out[addr]: D)
 {
     bind * <= if wr_en {
         mem_in[addr]@{clk} -> mem_out[addr]@{clk+1};
@@ -41,12 +41,12 @@ module memory<D>[addr<256>]@{clk} (mem_in[addr]: D; wr_en: ctrl) => (mem_out[add
     }
 }
 
-module mux[element<16>] (target@[element]: data<16>) => (output[element]: data<16>)
+device mux[element<16>] (target@[element]: data<16>) => (output[element]: data<16>)
 {
     bind output[element] <= target@[element]
 }
 
-module arith_logic_unit_expr (a: data<s32>; b: data<s32>; op: ops) => (y: data<s33>)
+device arith_logic_unit_expr (a: data<s32>; b: data<s32>; op: ops) => (y: data<s33>)
 {
     bind y <= match op {
         ops::add => a + b
@@ -57,7 +57,7 @@ module arith_logic_unit_expr (a: data<s32>; b: data<s32>; op: ops) => (y: data<s
     }
 }
 
-module arith_logic_unit_bind (a: data<s32>; b: data<s32>; op: ops) => (y: data<s33>)
+device arith_logic_unit_bind (a: data<s32>; b: data<s32>; op: ops) => (y: data<s33>)
 {
     bind * <= match op {
         ops::add => a + b -> y;
@@ -68,7 +68,7 @@ module arith_logic_unit_bind (a: data<s32>; b: data<s32>; op: ops) => (y: data<s
     }
 }
 
-module regfile[left<16>, right<16>, center<16>, in<16>]@{clk}
+device regfile[left<16>, right<16>, center<16>, in<16>]@{clk}
 (regin[in]: data<u32>; wr_en: ctrl)
 => (regleft[left]: data<u32>; regright[right]: data<u32>; regcenter[center]: data<u32>)
 {
@@ -83,7 +83,7 @@ enum states
     fetch, store, exec, wait
 }
 
-module program_counter@{clk}(target: data<u32>; set: ctrl; incr: ctrl) => (addr: data<u32>)
+device program_counter@{clk}(target: data<u32>; set: ctrl; incr: ctrl) => (addr: data<u32>)
 {
     bind * <= if set {
         target@{clk} -> addr@{clk+1}
@@ -94,7 +94,7 @@ module program_counter@{clk}(target: data<u32>; set: ctrl; incr: ctrl) => (addr:
     }
 }
 
-module cpu@{clk} () => ()
+device cpu@{clk} () => ()
 {
     use instruction::*
 
@@ -167,16 +167,15 @@ module cpu@{clk} () => ()
 /*
 encoding bcd;
 
-module bcd<L, T=L+(L-4)/3>: decode<data<bcd<L>>, data<signed<T>>> (input: data<bcd<L>>) => (output: data<signed<T>>)
+device bcd<L, T=L+(L-4)/3>: decode<data<bcd<L>>, data<signed<T>>> (input: data<bcd<L>>) => (output: data<signed<T>>)
 {
         ....
 }
 
 operator *: adder<A, B, Y>(left: data<A>, right: data<B>) => (output: data<Y>);
 
-module carry_lookahead<T>: adder<data<T>, data<T>, data<T>>(left: data<s16>, right: data<s16>) => (output: data<s17>)
+device carry_lookahead<T>: adder<data<T>, data<T>, data<T>>(left: data<s16>, right: data<s16>) => (output: data<s17>)
 {
 
 }
 */
-

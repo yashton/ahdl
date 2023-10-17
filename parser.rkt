@@ -1,7 +1,7 @@
 #lang brag
 hardware: statement*
 
-@statement: enum_def | union_def | struct_def | module_def | type_def | namespace_def | use_def | const_def
+@statement: enum_def | union_def | struct_def | device_def | type_def | namespace_def | use_def | const_def
 ;;;;;;;;;;;;;;;; Namespaces ;;;;;;;;;;;;;;;;
 use_def: /"use" namespace_ref use_aliases?
 use_aliases: (/"::" /"{" [use_alias (/";" use_alias)*] /"}")?
@@ -84,17 +84,17 @@ bind_expr_def: /"bind" reference /"<=" expr
 bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
 bind_args: [left_binding (/";" left_binding)*]
 
-;;;;;;;;;;;;;;;; Modules ;;;;;;;;;;;;;;;;
-module_def: /"module" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" module_body_defs /"}"
-module_body_defs: (module_def | enum_def | union_def | struct_def | type_def | bind_def | bind_expr_def | use_def | if_templ_def | for_templ_def | reset_def | default_def | const_def)*
+;;;;;;;;;;;;;;;; Devices ;;;;;;;;;;;;;;;;
+device_def: /"device" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" device_body_defs /"}"
+device_body_defs: (device_def | enum_def | union_def | struct_def | type_def | bind_def | bind_expr_def | use_def | if_templ_def | for_templ_def | reset_def | default_def | const_def)*
 argument_list: /"(" [argument (/";" argument)*] /")"
 argument: IDENTIFIER addr_ref? /":" type
 
-module_instance: IDENTIFIER module_generics?  module_clock_binding? module_input_binding
-module_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
-module_input_arg: right_binding | reference
-module_input_binding: /"(" ([module_input_arg (/";" module_input_arg)*])? /")"
-module_generics: /"<" [type (/"," type)*] /">"
+device_instance: IDENTIFIER device_generics?  device_clock_binding? device_input_binding
+device_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
+device_input_arg: right_binding | reference
+device_input_binding: /"(" ([device_input_arg (/";" device_input_arg)*])? /")"
+device_generics: /"<" [type (/"," type)*] /">"
 ;;;;;;;;;;;;;;;; Expressions ;;;;;;;;;;;;;;;;
 ; Expressions have two types - value expression (expr) or binding expressions (bind)
 ; bindings can't be used with operators
@@ -213,7 +213,7 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 @match_clause: destructure (/"when" expr)?
 
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
-binding: right_binding | let_bind | if_bind | match_bind | bindset | module_instance | templ_bind
+binding: right_binding | let_bind | if_bind | match_bind | bindset | device_instance | templ_bind
 
 bindset: ([binding (/";" binding)*] /";"?) | /";"
 right_binding: (expr /"->" reference) | (binding /"->" reference)
@@ -291,10 +291,10 @@ if_templ_expr: /"if" templ_op /"{" expr /"}" /"else" else_templ_expr
 if_templ: /"if" templ_op /"{" templ_op /"}" /"else" else_templ
 @else_templ: (if_templ | (/"{" templ_op /"}"))
 
-if_templ_def: /"if" templ_op /"{" module_body_defs /"}" /"else" else_templ_def
-@else_templ_def: (if_templ_def | (/"{" module_body_defs /"}"))
+if_templ_def: /"if" templ_op /"{" device_body_defs /"}" /"else" else_templ_def
+@else_templ_def: (if_templ_def | (/"{" device_body_defs /"}"))
 
 templ_generator: "#range" /"(" primary_templ /"," primary_templ (/"," primary_templ)? /")"
 
 for_templ_bind: /"for" IDENTIFIER /"in" templ_generator /"{" binding /"}"
-for_templ_def: /"for" IDENTIFIER /"in" templ_generator /"{" module_body_defs /"}"
+for_templ_def: /"for" IDENTIFIER /"in" templ_generator /"{" device_body_defs /"}"

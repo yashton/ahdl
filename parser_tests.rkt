@@ -26,7 +26,7 @@
   (define (parse-test-expr code)
     (match (parse-test code)
       [(list hardware d) d]))
-  (define (parse-test-module code)
+  (define (parse-test-device code)
     (match (parse-test code)
       [(list hardware d) d]))
   (define (parse-test-reference code)
@@ -497,32 +497,32 @@
                         (reference (ref_id s)))
                        (reference (ref_id t))))]))
 
-  (define module-tests
+  (define device-tests
     (test-suite
-     "module definition"
+     "device definition"
      [test-case
-         "Basic module"
+         "Basic device"
        (check-equal?
-        (parse-test-module
-         "module add(left:data<16>; right:data<16>) => (output:data<17>) {}")
-        '(module_def
+        (parse-test-device
+         "device add(left:data<16>; right:data<16>) => (output:data<17>) {}")
+        '(device_def
           add
           (argument_list
            (argument left (data_type (encoding_unsigned 16)))
            (argument right (data_type (encoding_unsigned 16))))
           (argument_list (argument output (data_type (encoding_unsigned 17))))
-          (module_body))
+          (device_body))
         )]
      [test-case
-         "Module with template variable"
+         "Device with template variable"
        (check-equal?
-        (parse-test-module
-         "module mux<S>[element<S>]
+        (parse-test-device
+         "device mux<S>[element<S>]
          (target@[element]:data<S>) => (output[element]:data<16>)
          {
              bind output[element] <= target@[element]
          }")
-        '(module_def
+        '(device_def
           mux
           (template_def S)
           (addr_def (addr_id_def element S))
@@ -536,20 +536,20 @@
             output
             (addr_use_ref (reference (ref_id element)))
             (data_type (encoding_unsigned 16))))
-          (module_body
+          (device_body
            (bind_def
             (bind_lhs (reference (ref_id output) (addr_use_ref (reference (ref_id element)))))
             (bind_rhs (reference (ref_id target) (addr_loc_ref (reference (ref_id element)))))))))]
      [test-case
-         "Module with template variable and clock"
+         "Device with template variable and clock"
        (check-equal?
-        (parse-test-module
-         "module mux<S>[element<S>]@{clk}
+        (parse-test-device
+         "device mux<S>[element<S>]@{clk}
          (target@[element]:data<S>) => (output[element]:data<16>)
          {
              bind output[element] <= target@[element]
          }")
-        '(module_def
+        '(device_def
           mux
           (template_def S)
           (addr_def (addr_id_def element S))
@@ -564,15 +564,15 @@
             output
             (addr_use_ref (reference (ref_id element)))
             (data_type (encoding_unsigned 16))))
-          (module_body
+          (device_body
            (bind_def
             (bind_lhs (reference (ref_id output) (addr_use_ref (reference (ref_id element)))))
             (bind_rhs (reference (ref_id target) (addr_loc_ref (reference (ref_id element)))))))))]))
 
 
-  (define module-instance-tests
+  (define device-instance-tests
     (test-suite
-     "module instance"
+     "device instance"
      [test-case
          "Simple instance"
        (check-equal?
@@ -580,11 +580,11 @@
         '(bind_def
           (bind_lhs (reference (ref_id y)))
           (bind_rhs
-           (module_instance
+           (device_instance
             adder
-            (module_input_binding
-             (module_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
-             (module_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]
+            (device_input_binding
+             (device_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (device_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]
      [test-case
          "Instance with generics"
        (check-equal?
@@ -592,11 +592,11 @@
         '(bind_def
           (bind_lhs (reference (ref_id y)))
           (bind_rhs
-           (module_instance
+           (device_instance
             adder
-            (module_input_binding
-             (module_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
-             (module_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]
+            (device_input_binding
+             (device_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (device_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]
      [test-case
          "Instance with generics and clock"
        (check-equal?
@@ -604,13 +604,13 @@
         '(bind_def
           (bind_lhs (reference (ref_id y)))
           (bind_rhs
-           (module_instance
+           (device_instance
             adder
-            (module_generics (encoding_unsigned 3))
-            (module_clock_binding clk)
-            (module_input_binding
-             (module_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
-             (module_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]))
+            (device_generics (encoding_unsigned 3))
+            (device_clock_binding clk)
+            (device_input_binding
+             (device_input_arg (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (device_input_arg (right_binding (reference (ref_id b)) (reference (ref_id right)))))))))]))
 
 
   (define binding-expr-tests
@@ -652,20 +652,20 @@
     (test-suite
      "top binding"
      [test-case
-         "simple module instance"
+         "simple device instance"
        (check-equal?
         (parse-test "bind alu <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)")
         '(hardware
           (bind_def
            (bind_lhs (reference (ref_id alu)))
            (bind_rhs
-            (module_instance
+            (device_instance
              arith_logic_unit
-             (module_clock_binding clk)
-             (module_input_binding
-              (module_input_arg (right_binding (reference (ref_id alu_op_a)) (reference (ref_id a))))
-              (module_input_arg (right_binding (reference (ref_id alu_op_b)) (reference (ref_id b))))
-              (module_input_arg (right_binding (reference (ref_id alu_op)) (reference (ref_id op))))))))))]))
+             (device_clock_binding clk)
+             (device_input_binding
+              (device_input_arg (right_binding (reference (ref_id alu_op_a)) (reference (ref_id a))))
+              (device_input_arg (right_binding (reference (ref_id alu_op_b)) (reference (ref_id b))))
+              (device_input_arg (right_binding (reference (ref_id alu_op)) (reference (ref_id op))))))))))]))
 
 
   (define reference-tests
@@ -779,8 +779,8 @@
   (run-tests match-tests)
   (run-tests let-tests)
   (run-tests ops-tests)
-  (run-tests module-tests)
-  (run-tests module-instance-tests)
+  (run-tests device-tests)
+  (run-tests device-instance-tests)
   (run-tests binding-expr-tests)
   (run-tests binding-tests)
   (run-tests reference-tests))

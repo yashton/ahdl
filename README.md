@@ -16,7 +16,7 @@ Structs represent named and typed slices of a set of unsigned bits. These are an
 Unions represent a set of multiple related interpretations of the bits. These are analogous to C unions in interpreted stored data, and algebraic data types from functional languages. Unions have a dedicated id field which allows differentiation at runtime.
 ## Expressions and definitions
 There are three kinds of statements.
-1. Definitions are `enum`, `module`, `struct`, `union`, `namespace`, and `use`.
+1. Definitions are `enum`, `device`, `struct`, `union`, `namespace`, and `use`.
 2. The `bind` statement introduces references from inside a binding into the current scope.
 3. Other keywords, operators, and references are expressions.
 
@@ -30,8 +30,8 @@ Bindings can use `let`, `if`, and `match`, but bindings can't be used as values 
 This corresponds to combinational/arithmetic logic (value expr) and net connections (bind expr)
 Value expressions could also be considered a syntactic sugar around binding a single reference to the anonymous output reference of the expression.
 
-Modules are named scopes, with input and output references.
-Inner modules close over the scope of the outer module.
+Devices are named scopes, with input and output references.
+Inner devices close over the scope of the outer device.
 Binding expressions are anonymous scopes, that also close over the outer scope.
 
 Bindings expressions behave like a reversed scope. The result of a binding expression is a set of references. For each reference it includes the expression that drives it, made up of the network of possible conditional paths and values that feed it. References must have a non-ambiguous input network, with a single driver. Multiple drivers is possible due to the terminal list of bindings separated by semicolons. The use of a binding in more than one branch of a binding list is an error. Bind of a reference in multiple mutually exclusive branches is allowed, i.e. in if/else or match.
@@ -73,4 +73,4 @@ Special bind block with bindings if a binding is missing in other code paths.
 Special bind block with bindings to value on reset
 ```reset@{rst} bind * <= {...}```
 ## Recursion
-Modules can be recursively defined.
+Devices can be recursively defined.
