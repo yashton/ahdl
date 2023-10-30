@@ -215,9 +215,8 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 match_clause: destructure (/"when" expr)?
 
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
-binding: right_binding | let_bind | if_bind | match_bind | bindset | device_instance | templ_bind
-
 bindset: ([binding (/";" binding)*] /";"?) | /";"
+binding: right_binding | let_bind | if_bind | match_bind | bindset | device_instance | templ_bind
 right_binding: (expr /"->" reference) | (binding /"->" reference)
 let_bind: let_clause /"{" binding /"}"
 if_bind: /"if" expr /"{" binding /"}" /"else" else_bind
@@ -280,7 +279,9 @@ op_templ_and: and_templ /"&&" neq_templ
 @or_templ: and_templ | op_templ_or
 op_templ_or: or_templ /"||" and_templ
 
-let_templ_clause: IDENTIFIER /"<-" templ_expr
+let_templ_clause: /"let" let_templ_items
+let_templ_item: IDENTIFIER /"<-" templ_expr
+let_templ_items: [let_templ_item (/"," let_templ_item)*]
 let_templ_bind: let_templ_clause /"{" binding /"}"
 let_templ_expr: let_templ_clause /"{" expr /"}"
 let_templ: let_templ_clause /"{" templ_expr /"}"

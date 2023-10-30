@@ -14,6 +14,20 @@ Enums are a set of named identifier values. Id values can be specified explicitl
 Structs represent named and typed slices of a set of unsigned bits. These are analogous to C structs, though are not required to align with byte or word boundaries.
 
 Unions represent a set of multiple related interpretations of the bits. These are analogous to C unions in interpreted stored data, and algebraic data types from functional languages. Unions have a dedicated id field which allows differentiation at runtime.
+
+Devices and bindsets can be bound as a collection to be used as subscriptable namespaces for references.
+```
+device some_device(...) => (output1 ...)
+
+bind dev <= some_device(...)
+... dev.output1 ...
+
+bind adev <= {
+  1'b -> foo;
+  0'b -> bar;
+}
+... adev.foo ...
+```
 ## Expressions and definitions
 There are three kinds of statements.
 1. Definitions are `enum`, `device`, `struct`, `union`, `namespace`, and `use`.
