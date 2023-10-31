@@ -78,13 +78,9 @@ templ_param_def: IDENTIFIER
 addr_bind: "@"? /"[" IDENTIFIER /"]"
 
 ;;;;;;;;;;;;;;;; Bind ;;;;;;;;;;;;;;;;
-bind_def: /"bind" bind_lhs /"<=" expr
+bind_def: /"bind" destructure /"<=" expr
 default_def: "default" bind_def
 reset_def: "reset" "@{" IDENTIFIER "}" bind_def
-
-
-bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
-bind_args: [left_binding (/";" left_binding)*]
 
 ;;;;;;;;;;;;;;;; Devices ;;;;;;;;;;;;;;;;
 device_def: /"device" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" device_body_defs /"}"
@@ -94,7 +90,8 @@ argument: IDENTIFIER addr_ref? /":" type
 
 device_instance: IDENTIFIER device_generics?  device_clock_binding? device_input_binding
 device_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
-device_input_arg: right_binding | reference
+input_binding: reference /"->" reference
+device_input_arg: input_binding | reference
 device_input_binding: /"(" ([device_input_arg (/";" device_input_arg)*])? /")"
 device_generics: /"<" [type (/"," type)*] /">"
 ;;;;;;;;;;;;;;;; Expressions ;;;;;;;;;;;;;;;;
@@ -108,17 +105,13 @@ addr_use_ref: /"[" expr /"]"
 addr_loc_ref: /"@" /"[" expr /"]"
 clk_ref: /"@" /"{" IDENTIFIER (("+"|"-") NUMBER)? /"}"
 
-@expr: let_expr | if_expr | match_expr | or_expr | type_hint | for_expr | binding | device_instance | instance_expr | literal
-
-type_hint: expr /":" type
-
 ;;;;;;;;;;;;;;;; Operators ;;;;;;;;;;;;;;;;
 ;; This matches C precedence
 @primary_expr: literal | reference | group_expr | join_expr
 @group_expr: /"(" expr /")"
 join_expr: /"{" [expr (/"," expr)+] /"}"
 
-@instance_expr: primary_expr | struct_instance | union_instance
+@instance_expr: primary_expr | struct_instance | union_instance | device_instance
 union_instance: IDENTIFIER /":" IDENTIFIER /"(" [expr (/"," expr)*] /")"
 struct_instance: IDENTIFIER /"(" [expr (/"," expr)*] /")"
 
@@ -194,19 +187,24 @@ op_and: and_expr /"&&" bor_expr
 @or_expr: and_expr | op_or
 op_or: or_expr /"||" and_expr
 
+@block_expr: let_expr | if_expr | match_expr | for_expr | or_expr
+
 ;;;;;;;;;;;;;;;; Let binding and destructuring ;;;;;;;;;;;;;;;;
-left_binding: destructure /"<-" (expr | binding)
 let_expr: let_clause /"{" expr /"}"
 @let_clause: /"let" (let_items | /"(" let_items /")")
-@let_item: left_binding | destructure_binding
 let_items: [let_item (/"," let_item)*]
+@let_item: left_binding | destructure_binding
 
-destructure: reference | literal | destructure_struct | destructure_union
+left_binding: destructure /"<-" expr
+destructure: reference | literal | destructure_struct | destructure_union | bind_lhs
 destructure_struct: IDENTIFIER /"(" [destructure (/"," destructure)*] /")"
 ;; Same syntax for unions to use in match. Unions are a compile error if used in let (ambiguous)
 destructure_union: @destructure_struct
+destructure_binding: bind_lhs /"<=" expr
 
-destructure_binding: bind_lhs /"<=" binding
+bind_lhs: (IDENTIFIER? /"(" bind_args /")" | bind_args | "*" | reference)
+bind_args: [left_binding (/";" left_binding)*]
+
 ;;;;;;;;;;;;;;;; Conditional ;;;;;;;;;;;;;;;;
 if_expr: /"if" expr /"{" expr /"}" /"else" else_expr
 @else_expr: (if_expr | (/"{" expr /"}"))
@@ -214,13 +212,19 @@ if_expr: /"if" expr /"{" expr /"}" /"else" else_expr
 match_expr: /"match" expr /"{" [match_expr_case (match_expr_case)*] /"}"
 match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 match_clause: destructure (/"when" expr)?
-;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
-binding: right_binding | bindset
-bindset: ([binding (/";" binding)*] /";"?) | /";"
-right_binding: (expr /"->" reference) | (binding /"->" reference)
 
 ;;;;;;;;;;;;;;;; Template expressions ;;;;;;;;;;;;;;;;
 @templ_generator: range_generator
-range_generator: "#range" /"(" primary_expr /"," primary_expr (/"," primary_expr)? /")"
+range_generator: /"#range" /"(" primary_expr /"," primary_expr (/"," primary_expr)? /")"
 
-for_expr: /"for" IDENTIFIER /"in" templ_generator /"{" expr /"}"
+for_expr: /"for" IDENTIFIER /"in" templ_generator /"{" block_expr /"}"
+
+;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
+@type_hint_expr: type_hint | block_expr
+type_hint: block_expr /":" type
+
+@bind_expr: /"{" bindset /"}" | bindset | right_binding | type_hint_expr
+bindset: ([bind_expr (/";" bind_expr)*] /";"?)
+right_binding: (type_hint_expr /"->" reference)
+
+@expr: bind_expr | or_expr

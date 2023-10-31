@@ -550,7 +550,7 @@
             (data_type (encoding_unsinged 16))))
           (device_body_defs
            (bind_def
-            (bind_lhs
+            (destructure
              (reference (ref_id output) (addr_use_ref (reference (ref_id element)))))
             (reference (ref_id target) (addr_loc_ref (reference (ref_id element))))))))]
      [test-case
@@ -579,7 +579,7 @@
             (data_type (encoding_unsinged 16))))
           (device_body_defs
            (bind_def
-            (bind_lhs
+            (destructure
              (reference (ref_id output) (addr_use_ref (reference (ref_id element)))))
             (reference (ref_id target) (addr_loc_ref (reference (ref_id element))))))))]))
 
@@ -592,42 +592,42 @@
        (check-equal?
         (parse-test-bind "bind y <= adder (a -> left; b -> right)")
         '(bind_def
-          (bind_lhs (reference (ref_id y)))
+          (destructure (reference (ref_id y)))
           (device_instance
            adder
            (device_input_binding
             (device_input_arg
-             (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (input_binding (reference (ref_id a)) (reference (ref_id left))))
             (device_input_arg
-             (right_binding (reference (ref_id b)) (reference (ref_id right))))))))]
+             (input_binding (reference (ref_id b)) (reference (ref_id right))))))))]
      [test-case
          "Instance with generics"
        (check-equal?
         (parse-test-bind "bind y <= adder (a -> left; b -> right)")
         '(bind_def
-          (bind_lhs (reference (ref_id y)))
+          (destructure (reference (ref_id y)))
           (device_instance
            adder
            (device_input_binding
             (device_input_arg
-             (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (input_binding (reference (ref_id a)) (reference (ref_id left))))
             (device_input_arg
-             (right_binding (reference (ref_id b)) (reference (ref_id right))))))))]
+             (input_binding (reference (ref_id b)) (reference (ref_id right))))))))]
      [test-case
          "Instance with generics and clock"
        (check-equal?
         (parse-test-bind "bind y <= adder<unsigned<3>>@{clk} (a -> left; b -> right)")
         '(bind_def
-          (bind_lhs (reference (ref_id y)))
+          (destructure (reference (ref_id y)))
           (device_instance
            adder
            (device_generics (encoding_unsinged 3))
            (device_clock_binding clk)
            (device_input_binding
             (device_input_arg
-             (right_binding (reference (ref_id a)) (reference (ref_id left))))
+             (input_binding (reference (ref_id a)) (reference (ref_id left))))
             (device_input_arg
-             (right_binding (reference (ref_id b)) (reference (ref_id right))))))))]))
+             (input_binding (reference (ref_id b)) (reference (ref_id right))))))))]))
 
 
 
@@ -646,43 +646,67 @@
               addr@{clk} -> addr@{clk+1}
           }")
         '(bind_def
-         (bind_lhs "*")
-         (if_expr
-          (reference (ref_id set))
-          (binding
+          (destructure (bind_lhs "*"))
+          (if_expr
+           (reference (ref_id set))
            (right_binding
             (reference (ref_id target) (clk_ref clk))
-            (reference (ref_id addr) (clk_ref clk "+" 1))))
-          (if_expr
-           (reference (ref_id incr))
-           (binding
+            (reference (ref_id addr) (clk_ref clk "+" 1)))
+           (if_expr
+            (reference (ref_id incr))
             (right_binding
              (op_add (reference (ref_id addr) (clk_ref clk)) (binary_literal "1'b"))
-             (reference (ref_id addr) (clk_ref clk "+" 1))))
-           (binding
+             (reference (ref_id addr) (clk_ref clk "+" 1)))
             (right_binding
              (reference (ref_id addr) (clk_ref clk))
-             (reference (ref_id addr) (clk_ref clk "+" 1))))))))]))
+             (reference (ref_id addr) (clk_ref clk "+" 1)))))))]))
 
   (define binding-tests
     (test-suite
      "top binding"
      [test-case
+         "if/else bindset"
+       (check-equal?
+        (parse-test-bind
+         "bind * <= if set {
+              target -> addr;
+              a + 1'd -> bar;
+          } else {
+              target + 1'd -> add;
+              a -> bar
+          }")
+        '(bind_def
+          (destructure (bind_lhs "*"))
+          (if_expr
+           (reference (ref_id set))
+           (bindset
+            (right_binding (reference (ref_id target)) (reference (ref_id addr)))
+            (right_binding
+             (op_add (reference (ref_id a)) (decimal_literal "1'd"))
+             (reference (ref_id bar))))
+           (bindset
+             (right_binding
+              (op_add (reference (ref_id target)) (decimal_literal "1'd"))
+              (reference (ref_id add)))
+             (right_binding
+              (reference (ref_id a))
+              (reference (ref_id bar)))))))]
+     [test-case
          "simple device instance"
        (check-equal?
         (parse-test-bind "bind alu <= arith_logic_unit@{clk} (alu_op_a -> a; alu_op_b -> b; alu_op -> op)")
         '(bind_def
-          (bind_lhs (reference (ref_id alu)))
+          (destructure (reference (ref_id alu)))
           (device_instance
            arith_logic_unit
            (device_clock_binding clk)
            (device_input_binding
             (device_input_arg
-             (right_binding (reference (ref_id alu_op_a)) (reference (ref_id a))))
+             (input_binding (reference (ref_id alu_op_a)) (reference (ref_id a))))
             (device_input_arg
-             (right_binding (reference (ref_id alu_op_b)) (reference (ref_id b))))
+             (input_binding (reference (ref_id alu_op_b)) (reference (ref_id b))))
             (device_input_arg
-             (right_binding (reference (ref_id alu_op)) (reference (ref_id op))))))))]))
+             (input_binding (reference (ref_id alu_op)) (reference (ref_id op))))))))]))
 
 
   (define reference-tests
