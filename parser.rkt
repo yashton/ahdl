@@ -54,26 +54,34 @@ encoding_unsinged: /("unsigned" | "u") | (/("unsigned" | "u") size_def?) | NUMBE
 type_def: /"type" IDENTIFIER /":=" type
 
 ;;;;;;;; Enums ;;;;;;;;
-enum_def: /"enum" IDENTIFIER id_def? /"{" [id_name (/"," id_name)*] /"}"
+enum_def: /"enum" IDENTIFIER enum_id enum_members
+enum_members: /"{" [id_name (/"," id_name)*] /"}"
+enum_id: id_def?
 id_name: IDENTIFIER (/"[" NUMBER /"]")?
 id_def: /"[" IDENTIFIER size_def? /"]"
 
 ;;;;;;;; Unions ;;;;;;;;
-union_def: /"union" IDENTIFIER size_def? id_def? /"{" [union_item (/"," union_item)*] /"}"
-union_item: IDENTIFIER /"(" [union_item_member (/"," union_item_member)*] /")"
-union_item_member: (IDENTIFIER /":" type) | id_name | literal
+union_def: /"union" IDENTIFIER union_size union_id union_variants
+union_size: size_def?
+union_id: id_def?
+union_variants: /"{" [union_variant (/"," union_variant)*] /"}"
+union_variant: IDENTIFIER /"(" [union_variant_member (/"," union_variant_member)*] /")"
+union_variant_member: (IDENTIFIER /":" type) | id_name | literal
 
 ;;;;;;;; Structs ;;;;;;;;
-struct_def: /"struct" IDENTIFIER size_def? /"(" [struct_item (/"," struct_item)*] /")"
-struct_item: (IDENTIFIER /":" type) | literal
+struct_def: /"struct" IDENTIFIER struct_size struct_members
+struct_size: size_def?
+struct_members: /"(" [struct_member (/"," struct_member)*] /")"
+struct_member: (IDENTIFIER /":" type) | literal
 
 ;;;;;;;;;;;;;;;; Definitions ;;;;;;;;;;;;;;;;
 ; Should allow positive edge, negative edge, or level trigger?
-clk_def: /"@" /"{" ("pos" | "neg" | "lev")? IDENTIFIER /"}"
+clk_id: ("pos" | "neg" | "lev")? IDENTIFIER
+clk_def: /"@" /"{" [clk_id (/"," clk_id)*]? /"}" | ()
 addr_id_def: IDENTIFIER size_def?
-addr_def: /"[" [addr_id_def (/"," addr_id_def)*] /"]"
+addr_def: /"[" [addr_id_def (/"," addr_id_def)*]? /"]" | ()
 
-template_def: /"<" [templ_param_def (/"," templ_param_def)*] /">"
+template_def: /"<" [templ_param_def (/"," templ_param_def)*]? /">" | ()
 templ_param_def: IDENTIFIER
 addr_bind: "@"? /"[" IDENTIFIER /"]"
 
@@ -83,17 +91,17 @@ default_def: "default" bind_def
 reset_def: "reset" "@{" IDENTIFIER "}" bind_def
 
 ;;;;;;;;;;;;;;;; Devices ;;;;;;;;;;;;;;;;
-device_def: /"device" IDENTIFIER template_def? addr_def? clk_def? argument_list /"=>" argument_list /"{" device_body_defs /"}"
+device_def: /"device" IDENTIFIER template_def addr_def clk_def argument_list /"=>" argument_list /"{" device_body_defs /"}"
 device_body_defs: (device_def | enum_def | union_def | struct_def | type_def | bind_def | use_def | default_def | reset_def | const_def)*
 argument_list: /"(" [argument (/";" argument)*] /")"
 argument: IDENTIFIER addr_ref? /":" type
 
-device_instance: IDENTIFIER device_generics?  device_clock_binding? device_input_binding
-device_clock_binding: /"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}"
+device_instance: IDENTIFIER device_generics device_clock_binding device_input_binding
+device_clock_binding: (/"@" /"{" [IDENTIFIER (/"," IDENTIFIER)*] /"}")?
 input_binding: reference /"->" reference
 device_input_arg: input_binding | reference
 device_input_binding: /"(" ([device_input_arg (/";" device_input_arg)*])? /")"
-device_generics: /"<" [type (/"," type)*] /">"
+device_generics: (/"<" [type (/"," type)*] /">")?
 ;;;;;;;;;;;;;;;; Expressions ;;;;;;;;;;;;;;;;
 ; Expressions have two types - value expression (expr) or binding expressions (bind)
 ; bindings can't be used with operators
@@ -214,10 +222,10 @@ match_expr_case: match_clause /"=>" ((/"{" expr /"}") | expr)
 match_clause: destructure (/"when" expr)?
 
 ;;;;;;;;;;;;;;;; Template expressions ;;;;;;;;;;;;;;;;
-@templ_generator: range_generator
+@templ_generator: range_generator | list_generator
 range_generator: /"#range" /"(" primary_expr /"," primary_expr (/"," primary_expr)? /")"
-
-for_expr: /"for" IDENTIFIER /"in" templ_generator /"{" block_expr /"}"
+list_generator: "/#[" [expr ("," expr)*] "/]"
+for_expr: /"for" IDENTIFIER /"in" templ_generator /"{" expr /"}"
 
 ;;;;;;;;;;;;;;;; Binding expressions ;;;;;;;;;;;;;;;;
 @type_hint_expr: type_hint | block_expr
@@ -227,4 +235,4 @@ type_hint: block_expr /":" type
 bindset: ([bind_expr (/";" bind_expr)*] /";"?)
 right_binding: (type_hint_expr /"->" reference)
 
-@expr: bind_expr | or_expr
+@expr: bind_expr

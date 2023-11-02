@@ -3,18 +3,20 @@
 (require (for-syntax racket/syntax))
 (require (for-syntax racket/string))
 (require (for-syntax syntax/stx))
-(require "desugar.rkt")
 
 (provide hardware #%module-begin #%app #%datum
          namespace_def use_def
-         device_def bind_expr_def
-         enum_def id_name
-         struct_def
-         let_expr let_templ_expr match_expr
-         let_bind let_templ_bind match_bind
-         let_templ
-         bind_def right_binding binding
-         (struct-out enum))
+         ;;const_def
+         bind_def
+         )
+
+;; const_def -> bound value
+;; device_def -> (constructor template_vars) -> (bindable context))
+;; namespace_def -> module
+;; use_def -> require
+;; bind_def -> input scope -> (bindable context) -> binding
+
+;; evaluate templates
 
 ;; Match desugar
 ;; -- change to equality if/else with let bindings
@@ -34,10 +36,11 @@
 ;; breadth first bind traverse
 ;; all module level graph net references should be in scope.
 ;; take every let or conditional expression, add to device graph.
-;; -- generate-temporary should be globally unique(?check?), use as net name
+;; -- generate-temporary should be globally unique(?check?), use as top level net name
 ;; replace if conditional expressions with the generated net reference.
-;; substitute let references with generated references and remove let clauses.
-;; remaining expression should consist entirely of let aliases and if/else terminating in bindsets of right_bindings
+;; replace let right hand expressions with generated references
+;; gather all right binding references
+;; remaining expression should consist entirely of let aliases and if/else terminating in bindsets
 
 ;; depth first bind traverse
 ;; case bindset.
@@ -59,6 +62,59 @@
 ;; -- presence in multiple bind_defs constitutes a double binding
 
 ;; gather clocked nets, verify schedule (all bind times > use times)
+
+;;;;;;;;;;;;;;;; Desugar ;;;;;;;;;;;;;;;;
+;; expand let item lists to nested let
+(define-for-syntax (desugar-match-expr-case top_id cases)
+  (with-syntax ([top top_id])
+    (if (stx-null? cases)
+        #'(bindset)
+        (syntax-case (stx-car cases) (match_expr_case match_clause)
+          [(match_expr_case (match_clause destruct condition) body)
+           (with-syntax ([inner (desugar-match-expr-case top_id (stx-cdr cases))]
+                         [de-body (desugar #'body)])
+             ;; in principle could move the destruct as a let around the if and mess with scope.
+             ;; destructure twice is no big deal to duplicate, just creating references
+             #'(if_expr (match_expr_cond top destruct condition)
+                        (let_expr (left_binding destruct top) de-body)
+                        inner))]
+          [(match_expr_case (match_clause destruct) body)
+           (with-syntax ([inner (desugar-match-expr-case top_id (stx-cdr cases))]
+                         [de-body (desugar #'body)])
+             #'(if_expr (match_expr_cond top destruct)
+                        (let_expr (left_binding destruct top) de-body)
+                        inner))]))))
+
+(define-for-syntax (desugar stx)
+  (syntax-case stx (reference match_expr if_expr let_expr let_items left_binding right_binding)
+;; Desugar destructure to nested let
+;; probably need to delay to next phase (treat as decoder)
+    [(let_expr (let_items thing) body)
+     (with-syntax ([de-body (desugar #'body)]
+                   [de-thing (desugar #'thing)])
+       #'(let_expr de-thing de-body))]
+    [(let_expr (let_items first rest ...) body)
+     (with-syntax ([de-body (desugar #'(let_expr (let_items rest ...) body))]
+                   [de-first (desugar #'first)])
+       #'(let_expr de-first de-body))]
+;; Desugar match to if/else
+    [(match_expr expr cases ...)
+     (with-syntax ([symbol (generate-temporary)]
+                   [de-expr (desugar #'expr)])
+       (with-syntax ([ifs (desugar-match-expr-case #'symbol (stx->list #'(cases ...)))])
+         #'(let_expr (left_binding symbol de-expr) ifs)))]
+;; Expand right binding lhs expressions to a let
+    [(right_binding (reference _ ...) _) stx]
+    [(right_binding lhs rhs)
+     (with-syntax ([symbol (generate-temporary)])
+       #'(let_expr (left_binding symbol lhs) (right_binding symbol rhs)))]
+    [(if_expr cond then else)
+     (with-syntax ([de-cond (desugar #'cond)]
+                   [de-then (desugar #'then)]
+                   [de-else (desugar #'else)])
+       #'(if_expr de-cond de-then de-else))]
+    [_ stx]))
+
 
 ;;;;;;;;;;;;;;;; Statements ;;;;;;;;;;;;;;;;
 (define-syntax (hardware stx)
@@ -82,53 +138,7 @@
      (with-syntax ([mod (syntax-local-eval #'(string-join (paths ...) "/"))])
         #'(require (lib mod)))]))
 
-;;;;;;;;;;;;;;;; Enum definitions ;;;;;;;;;;;;;;;;
-(define-syntax (enum_def stx)
-  (syntax-case stx ()
-    [(_ name values ...)
-     #'(module* name #f
-         values ...)]))
-
-(define-syntax (id_name stx)
-  (syntax-case stx ()
-    [(_ name) #'(begin (provide name) (define name (enum name '())))]
-    [(_ name id) #'(begin (provide name) (define name (enum name id)))]))
-
-;;;;;;;;;;;;;;;; Device definitions ;;;;;;;;;;;;;;;;
-(define-syntax (device_def stx)
-  (syntax-case stx (template_def addr_def clk_def device_body_defs argument_list argument)
-    [(_ name types ...
-        (argument_list (argument input_name input_type ...) ...)
-        (argument_list (argument output_name output_type ...) ...)
-        (device_body_defs defs ...))
-     #'(module* name #f
-         (define inputs '(input_name ...))
-         defs ...
-         (define outputs '(output_name ...)))]))
-
-;;;;;;;;;;;;;;;; Struct definitions ;;;;;;;;;;;;;;;;
-(define-syntax (struct_def stx)
-  (syntax-case stx (struct_item)
-    [(_ name size (struct_item item_name type) ...) #'(struct name (item_name ...))]
-    [(_ name (struct_item item_name type) ...) #'(struct name (item_name ...))]))
-
-;;;;;;;;;;;;;;;; Constant declarations ;;;;;;;;;;;;;;;;
-
-;; (define-syntax (const_def name expr)
-;;   (define name expr))
-
-;; (define-syntax (union_def name items)
-;;   (struct name (map items (struct item members))))
-;; (define-syntax (type_def name items)
-;;   (define name items))
-
 ;;;;;;;;;;;;;;;; Binding ;;;;;;;;;;;;;;;;
-(define-syntax (bind_def stx)
-  (syntax-case stx ()
-    [(_ lhs bind)
-     (with-syntax ([((binds ...) (devs ...)) (extract-bind #'bind)])
-     #'((bind_extract lhs (binds ...)) top_defs ...))]))
-
 (define-for-syntax (raise-missing-bind bind)
   (raise-syntax-error
    #f "Conditional bound value had no corresponding bind or default" bind))
@@ -137,81 +147,178 @@
   (raise-syntax-error
    #f "Reference bound twice" bind))
 
-(define-for-syntax (outer-join-branches cond lefts rights defaults)
-  ;;  for each key in left, get from rights or from defaults, add to output.
-  ;;  for each key in right, if key not in left, get from defaults, add to output
-  ;;  if ever not in defaults, raise
-  (foldl
-   (match-lambda ((bind right) binds)
-                 (if (dict-has-key? lefts bind)
-                     binds
-                     (let ([left (dict-ref defaults bind (lambda () (raise-missing-bind bind)))])
-                       (dict-set bind #'(bind_expr_def bind (if_expr cond left right))))))
-   (dict-map/copy
-    (lambda (bind left)
-      (let ([right (dict-ref
-                    rights bind
-                    (lambda ()
-                      (dict-ref
-                       defaults bind
-                       (lambda () (raise-missing-bind bind)))))])
-        #'(bind_expr_def bind (if_expr cond left right)))))))
-
-(define-for-syntax (wrap-let ident assign exprs)
-  (map (match-lambda ((bind_expr_def bind value))
-                     #'(bind_expr_def bind (let_expr (left_binding ident assign) value)))
-       exprs))
-
-(define-for-syntax (dict-merge left right)
-  (foldl (match-lambda (((ident value) binds))
-                       (dict-set binds ident value))
-         left
-         (dict->list right)))
-(define-for-syntax (dict-are-mutex? left right)
-  (empty? (filter (curry dict-has-key? left)
-                  (dict-keys right))))
+(define-for-syntax (wrap-bind assign ident)
+  (lambda (dev)
+    (syntax-case dev (bind_expr)
+      [(bind_expr a b)
+       (with-syntax ([assign assign]
+                     [ident ident])
+         #'(bind_expr a (let_expr (left_binding assign ident) b)))])))
 
 ;; These should be the only cases left after desugar and destructuring
-(define-for-syntax (extract-bind-defaults bind defaults)
-  (syntax-case bind (if_bind left_binding let_bind right_binding bindset)
-    [(if_bind cond then else)
+(define-for-syntax (extract-devices expr)
+  (syntax-case expr (if_expr let_expr right_binding bindset)
+    [(if_expr cond then else)
      (with-syntax ([ident (generate-temporary #'cond)]
-                   [(then_binds then_devs) (extract_bind-defaults then defaults)]
-                   [(else_binds else_devs) (extract_bind-defaults else defaults)])
-
-       (list (outer-join-branches cond then_binds else_binds defaults)
-             (cons (bind_expr_def ident cond) (append then_devs else_devs)))]
-    [(let_bind (left_binding assign expr) body)
-     (with-syntax ([ident (generate-temporary #'cond)])
-       (match (extract-bind-defaults body defaults)
-         [(binds devs)
-          (let ([wrap-binds (wrap-let ident assign binds)]
-                [wrap-devs (wrap-let ident assign devs)])
-            (list wrap-binds (cons (bind_expr_def ident expr) wrap-devs))]))]
+                   [(then-expr (then-devs ...) (then-binds ...)) (extract-devices #'then)]
+                   [(else-expr (else-devs ...) (else-binds ...)) (extract-devices #'else)])
+       #'((if_expr ident then-expr else-expr)
+          ((bind_expr ident cond) then-devs ... else-devs ...)
+          (then-binds ... else-binds ...)))]
+    [(let_expr (left_binding assign expr) body)
+     (with-syntax ([ident (generate-temporary #'cond)]
+                   [(body-expr (body-devs ...) body-binds) (extract-devices #'body)])
+         (with-syntax ([(devs ...) (stx-map (wrap-bind #'assign #'ident)
+                                            #'(body-devs ...))])
+           #'((let_expr (left_binding assign ident) body-expr)
+              ((bind_expr ident expr) devs ...)
+              body-binds)))]
     [(bindset binding bindings ...)
-     (let* ([(bindings devices) (extract-bind-defaults binding defaults)]
-            [(rest_bindings rest_devices) (extract-bind-defaults binding defaults)]
-            [joined_bindings (begin
-                               (cond (dict-are-mutex? bindings rest-bindings)
-                                     (raise-double-bind binding))
-                               (dict-merge bindings rest-bindings)])
-       (list joined_bindings (append devices rest_devices)))))]
-    [(bindset binding)
-     (extract-bind-defaults binding defaults)]
+     (with-syntax ([(expr (devs ...) (binds ...)) (extract-devices #'binding)]
+                   [((bindset rest_expr ...) (rest_devs ...) (rest_bind ...))
+                    (extract-devices #'(bindset bindings ...))])
+       #'((bindset bindings ... rest_expr ...)
+          (devs ... rest_devs ...)
+          (binds ... rest_bind ...)))]
+    [(bindset bind)
+     (extract-devices #'bind)]
     [(right_binding left right)
-     (with-syntax ([ident (reference-identifier right)])
-       (list (make-free-id-table ident (bind_expr_def right left)) '()))]
+     #'((right_binding left right)
+        ()
+        (right))]
+    [other #'(other () ())]))
 
-(define-syntax (binding stx)
+(define-for-syntax (extract-binding binding expr)
+  (syntax-case expr (if_expr let_expr right_binding bindset default)
+    [(if_expr cond then else)
+     (with-syntax ([then-bind (extract-binding binding #'then)]
+                   [else-bind (extract-binding binding #'else)])
+       (if (and (equal? (syntax->datum #'then-bind) 'default)
+                (equal? (syntax->datum #'else-bind) 'default))
+           #''default
+           #'(op_mux cond then-bind else-bind)))]
+    [(let_expr (left_binding ident value) body)
+     (with-syntax ([body-bind (extract-binding binding #'body)])
+       (if (equal? (syntax->datum #'body-bind) 'default)
+           #''default
+           #'(let ([ident value]) body-bind)))]
+    [(bindset bind binds ...)
+     (with-syntax ([extracted (extract-binding binding #'bind)]
+                   [rest_extracted (extract-binding binding #'(bindset binds ...))])
+       (if (and (not (equal? (syntax->datum #'extracted) 'default))
+                (not (equal? (syntax->datum #'rest_extracted) 'default)))
+           (raise-double-bind #'bind)
+           (if (not (equal? (syntax->datum #'extracted) 'default))
+               #'extracted
+               (if (not (equal? (syntax->datum #'rest_extracted) 'default))
+                   #'rest_extracted
+                   #''default))))]
+    [(bindset bind)
+     (extract-binding binding #'bind)]
+    [(right_binding left right)
+     (if (equal? (syntax->datum binding) (syntax->datum #'right))
+         #'left
+         #'default)]))
+
+(define-syntax (bind_def stx)
   (syntax-case stx ()
-    [(_ expr)
-     #'(list expr)]))
+    [(_ lhs expr)
+     (with-syntax ([(tree (dev ...) bound) (extract-devices (desugar #'expr))])
+       (with-syntax ([(bind ...) (stx-map
+                                  (lambda (ref)
+                                    (with-syntax ([inner (extract-binding ref #'tree)]
+                                                  [id ref])
+                                    #'(bind_expr id inner)))
+                                  #'bound)])
+         #'(begin dev ... bind ...)))]))
 
-(define-for-syntax (reference-identifier stx)
-  (with-syntax ([id stx])
-    #'|stx|))
-;; ;;;;;;;;;;;;;;;; Templates ;;;;;;;;;;;;;;;;
-;; (define-syntax (if_templ_def clause then else)
-;;    (if clause then else))
-;; ;;(define bindings (foreach (define for_templ_def)))
-;; ;;;
+;;;;;;;;;;;;;;;; Nodes ;;;;;;;;;;;;;;;;
+(provide
+ (struct-out op_pos)
+ (struct-out op_neg)
+ (struct-out op_bnot)
+ (struct-out op_not)
+ (struct-out op_mult)
+ (struct-out op_div)
+ (struct-out op_mod)
+ (struct-out op_add)
+ (struct-out op_sub)
+ (struct-out op_shiftl)
+ (struct-out op_shiftr)
+ (struct-out op_lt)
+ (struct-out op_gt)
+ (struct-out op_lte)
+ (struct-out op_gte)
+ (struct-out op_eq)
+ (struct-out op_neq)
+ (struct-out op_band)
+ (struct-out op_bxor)
+ (struct-out op_bor)
+ (struct-out op_and)
+ (struct-out op_or)
+ (struct-out op_mux)
+ (struct-out op_index)
+ (struct-out op_slice)
+ (struct-out reference)
+ (struct-out enum_def)
+ (struct-out struct_def)
+ (struct-out union_def)
+ (struct-out union_variant)
+ (struct-out device_instance)
+ (struct-out struct_instance)
+ (struct-out union_instance))
+
+(struct op_pos (left))
+(struct op_neg (left))
+(struct op_bnot (left))
+(struct op_not (left))
+(struct op_mult (left right))
+(struct op_div (left right))
+(struct op_mod (left right))
+(struct op_add (left right))
+(struct op_sub (left right))
+(struct op_shiftl (left right))
+(struct op_shiftr (left right))
+(struct op_lt (left right))
+(struct op_gt (left right))
+(struct op_lte (left right))
+(struct op_gte (left right))
+(struct op_eq (left right))
+(struct op_neq (left right))
+(struct op_band (left right))
+(struct op_bxor (left right))
+(struct op_bor (left right))
+(struct op_and (left right))
+(struct op_or (left right))
+(struct op_mux (switch left right))
+(struct op_index (data index))
+(struct op_slice (data msb lsb))
+(struct reference (name address clock))
+(struct enum_def (name id members))
+(struct struct_def (name size members))
+(struct union_def (name size id variants))
+(struct union_variant (name members))
+(struct device_instance (name template clk inputs))
+(struct struct_instance (name members))
+(struct union_instance (union name members))
+(struct splat_literal (value))
+(struct binary_literal (value))
+(struct seximal_literal (value))
+(struct octal_literal (value))
+(struct decimal_literal (value))
+(struct hex_literal (value))
+(struct ascii_literal (value))
+(struct nif_literal (value))
+
+(provide device_def)
+(define-syntax (device_def stx)
+  (syntax-case stx (template_def addr_def clk_def device_body_defs argument_list argument)
+    [(_ ... (device_body_defs defs ...))
+     #'(begin defs ...)]))
+
+(define-syntax (destructure stx) (generate-temporary stx))
+
+(define-syntax (bind_expr stx)
+  (with-syntax ([x stx]
+                [i (generate-temporary stx)])
+    #'(define i 'x)))
