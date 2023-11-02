@@ -1,8 +1,10 @@
 #lang racket
-(require (for-syntax syntax/parse))
-(require (for-syntax racket/syntax))
-(require (for-syntax racket/string))
-(require (for-syntax syntax/stx))
+(require (for-syntax syntax/parse)
+         (for-syntax racket/syntax)
+         (for-syntax racket/string)
+         (for-syntax racket/set)
+         (for-syntax syntax/stx)
+         (for-syntax syntax/id-set))
 
 (provide hardware #%module-begin #%app #%datum
          namespace_def use_def
@@ -85,6 +87,15 @@
                         (let_expr (left_binding destruct top) de-body)
                         inner))]))))
 
+(define-for-syntax (ref-id stx)
+  (syntax-case stx ()
+    [(reference s) #'s]
+    [_ stx]))
+
+(define-syntax (reference stx)
+  (syntax-case stx ()
+    [(_ s) #'s]))
+
 (define-for-syntax (desugar stx)
   (syntax-case stx (reference match_expr if_expr let_expr let_items left_binding right_binding)
 ;; Desugar destructure to nested let
@@ -106,15 +117,15 @@
 ;; Expand right binding lhs expressions to a let
     [(right_binding (reference _ ...) _) stx]
     [(right_binding lhs rhs)
-     (with-syntax ([symbol (generate-temporary)])
-       #'(let_expr (left_binding symbol lhs) (right_binding symbol rhs)))]
+     (with-syntax ([symbol (generate-temporary)]
+                   [de-lhs (desugar #'lhs)])
+       #'(let_expr (left_binding symbol de-lhs) (right_binding symbol rhs)))]
     [(if_expr cond then else)
      (with-syntax ([de-cond (desugar #'cond)]
                    [de-then (desugar #'then)]
                    [de-else (desugar #'else)])
        #'(if_expr de-cond de-then de-else))]
-    [_ stx]))
-
+    [x #'x]))
 
 ;;;;;;;;;;;;;;;; Statements ;;;;;;;;;;;;;;;;
 (define-syntax (hardware stx)
@@ -188,49 +199,87 @@
         (right))]
     [other #'(other () ())]))
 
+(define-for-syntax (extract-expr expr)
+  (syntax-case expr (bind_expr if_expr let_expr)
+    [(bind_expr id body)
+     (with-syntax ([body-expr (extract-expr #'body)])
+       #'(bind_expr id body-expr))]
+    [(if_expr cond then else)
+     (with-syntax ([then-expr (extract-expr #'then)]
+                   [else-expr (extract-expr #'else)])
+       #'(op_mux cond then-expr else-expr))]
+    [(let_expr (left_binding id value) body)
+     (with-syntax ([body-expr (extract-expr #'body)]
+                   [val-expr (extract-expr #'value)]
+                   [ident (ref-id #'id)])
+       #'(let ([ident val-expr]) body-expr))]
+    [(op left center right)
+     (with-syntax ([left-expr (extract-expr #'left)]
+                   [center-expr (extract-expr #'center)]
+                   [right-expr (extract-expr #'right)])
+       #'(op left-expr center-expr right-expr))]
+    [(op left right)
+     (with-syntax ([left-expr (extract-expr #'left)]
+                   [right-expr (extract-expr #'right)])
+       #'(op left-expr right-expr))]
+    [(op value)
+     (with-syntax ([value-expr (extract-expr #'value)])
+       #'(op value-expr))]
+    [x #'x]))
+
+(define-for-syntax (is-default? stx)
+  (equal? (syntax->datum stx) 'default))
+
 (define-for-syntax (extract-binding binding expr)
-  (syntax-case expr (if_expr let_expr right_binding bindset default)
+  (syntax-case expr (bind_def if_expr let_expr right_binding bindset default)
     [(if_expr cond then else)
      (with-syntax ([then-bind (extract-binding binding #'then)]
                    [else-bind (extract-binding binding #'else)])
-       (if (and (equal? (syntax->datum #'then-bind) 'default)
-                (equal? (syntax->datum #'else-bind) 'default))
+       (if (and (is-default? #'then-bind)
+                (is-default? #'else-bind))
            #''default
            #'(op_mux cond then-bind else-bind)))]
-    [(let_expr (left_binding ident value) body)
-     (with-syntax ([body-bind (extract-binding binding #'body)])
-       (if (equal? (syntax->datum #'body-bind) 'default)
+    [(let_expr (left_binding id value) body)
+     (with-syntax ([body-bind (extract-binding binding #'body)]
+                   [ident (ref-id #'id)])
+       (if (is-default? #'body-bind)
            #''default
            #'(let ([ident value]) body-bind)))]
     [(bindset bind binds ...)
      (with-syntax ([extracted (extract-binding binding #'bind)]
                    [rest_extracted (extract-binding binding #'(bindset binds ...))])
-       (if (and (not (equal? (syntax->datum #'extracted) 'default))
-                (not (equal? (syntax->datum #'rest_extracted) 'default)))
+       (if (and (not (is-default? #'extracted))
+                (not (is-default? #'rest_extracted)))
            (raise-double-bind #'bind)
-           (if (not (equal? (syntax->datum #'extracted) 'default))
+           (if (not (is-default? #'extracted))
                #'extracted
-               (if (not (equal? (syntax->datum #'rest_extracted) 'default))
+               (if (not (is-default? #'rest_extracted))
                    #'rest_extracted
                    #''default))))]
     [(bindset bind)
      (extract-binding binding #'bind)]
     [(right_binding left right)
-     (if (equal? (syntax->datum binding) (syntax->datum #'right))
+     (if (equal? binding (ref-id #'right))
          #'left
          #'default)]))
+
+(define-for-syntax (unique-ids bound)
+  (foldl (lambda (b s) (free-id-set-add s (ref-id b)))
+         (immutable-free-id-set)
+         (stx->list bound)))
 
 (define-syntax (bind_def stx)
   (syntax-case stx ()
     [(_ lhs expr)
      (with-syntax ([(tree (dev ...) bound) (extract-devices (desugar #'expr))])
-       (with-syntax ([(bind ...) (stx-map
+       (with-syntax ([(bind ...) (set-map
+                                  (unique-ids #'bound)
                                   (lambda (ref)
                                     (with-syntax ([inner (extract-binding ref #'tree)]
                                                   [id ref])
-                                    #'(bind_expr id inner)))
-                                  #'bound)])
-         #'(begin dev ... bind ...)))]))
+                                      #'(bind_expr id inner))))]
+                     [(expr ...) (stx-map extract-expr #'(dev ...))])
+         #'(begin expr ... bind ...)))]))
 
 ;;;;;;;;;;;;;;;; Nodes ;;;;;;;;;;;;;;;;
 (provide
@@ -259,14 +308,23 @@
  (struct-out op_mux)
  (struct-out op_index)
  (struct-out op_slice)
- (struct-out reference)
+ reference
+;; (struct-out reference)
  (struct-out enum_def)
  (struct-out struct_def)
  (struct-out union_def)
  (struct-out union_variant)
  (struct-out device_instance)
  (struct-out struct_instance)
- (struct-out union_instance))
+ (struct-out union_instance)
+ (struct-out splat_literal)
+ (struct-out binary_literal)
+ (struct-out seximal_literal)
+ (struct-out octal_literal)
+ (struct-out decimal_literal)
+ (struct-out hex_literal)
+ (struct-out ascii_literal)
+ (struct-out nif_literal))
 
 (struct op_pos (left))
 (struct op_neg (left))
@@ -293,7 +351,7 @@
 (struct op_mux (switch left right))
 (struct op_index (data index))
 (struct op_slice (data msb lsb))
-(struct reference (name address clock))
+;; (struct reference (name address clock))
 (struct enum_def (name id members))
 (struct struct_def (name size members))
 (struct union_def (name size id variants))
@@ -301,6 +359,7 @@
 (struct device_instance (name template clk inputs))
 (struct struct_instance (name members))
 (struct union_instance (union name members))
+(struct bool_literal (value))
 (struct splat_literal (value))
 (struct binary_literal (value))
 (struct seximal_literal (value))
@@ -319,6 +378,5 @@
 (define-syntax (destructure stx) (generate-temporary stx))
 
 (define-syntax (bind_expr stx)
-  (with-syntax ([x stx]
-                [i (generate-temporary stx)])
-    #'(define i 'x)))
+  (syntax-case stx (reference)
+    [(_ id expr) #'(define id expr)]))

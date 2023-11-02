@@ -15,7 +15,8 @@ namespace_def: /"namespace" namespace_id /"{" statement* /"}"
 ; Allowed to use a generic name
 @size_def: /"<" (NUMBER? | IDENTIFIER)? /">"
 
-@literal: splat_literal | binary_literal | seximal_literal | octal_literal | decimal_literal | hex_literal | ascii_literal | nif_literal
+@literal: bool_literal | splat_literal | binary_literal | seximal_literal | octal_literal | decimal_literal | hex_literal | ascii_literal | nif_literal
+bool_literal: "#t" | "#f"
 ; Splats can be used to fill in the remaining parts of literal, or a struct, or
 ; as a way to fill a value.
 splat_literal: ("'?" | "'1" | "'0") size_def?
@@ -36,6 +37,7 @@ const_def: /"const" IDENTIFIER /"<=" expr
 ; should subtype be allow as implicit data<>?
 @type: clk_type | addr_type | data_type | ctrl_type | subtype
 ; In case a clk or address needs to be passed as a value
+bool_type: /"bool"
 clk_type: /"clock"
 addr_type: /"address" size_def?
 ctrl_type: /"ctrl" (/"<" subtype /">")?
